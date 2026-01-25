@@ -2,32 +2,29 @@
  * User profile operations with Supabase
  */
 
-import { supabase } from "./client";
+import { createClientSupabaseClient } from "./auth-client";
 import type { UserProfile } from "@/types";
 
 /**
- * Generate a simple user ID for MVP (in production, use Supabase Auth)
+ * Get the authenticated user ID from Supabase Auth
  */
-function getUserId(): string {
-  if (typeof window === "undefined") {
-    return "anonymous";
-  }
-  
-  // For MVP, use a stored user ID or generate one
-  let userId = localStorage.getItem("userId");
-  if (!userId) {
-    userId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem("userId", userId);
-  }
-  return userId;
+async function getUserId(): Promise<string | null> {
+  const supabase = createClientSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
 }
 
 /**
  * Get user profile from Supabase
  */
 export async function getUserProfile(): Promise<UserProfile | null> {
-  const userId = getUserId();
+  const userId = await getUserId();
   
+  if (!userId) {
+    return null;
+  }
+
+  const supabase = createClientSupabaseClient();
   const { data, error } = await supabase
     .from("user_profiles")
     .select("*")
@@ -59,8 +56,13 @@ export async function getUserProfile(): Promise<UserProfile | null> {
  * Save user profile to Supabase
  */
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
-  const userId = getUserId();
+  const userId = await getUserId();
 
+  if (!userId) {
+    throw new Error("User must be authenticated to save profile");
+  }
+
+  const supabase = createClientSupabaseClient();
   const { error } = await supabase
     .from("user_profiles")
     .upsert(

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 
 import { AnimatedAuthForm } from "@/components/auth/AnimatedAuthForm";
 import { Card } from "@/components/ui/card";
+import { signIn, signUp } from "@/lib/supabase/auth";
 
 type AuthMode = "signin" | "signup";
 
@@ -49,22 +50,44 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const [fullName, setFullName] = React.useState("");
   const [companyName, setCompanyName] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | undefined>();
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(undefined);
     setToastMessage(null);
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      if (isSignup) {
+        // Sign up new user
+        const { user } = await signUp(email, password);
+        
+        if (user) {
+          setToastMessage("Account created successfully! Redirecting...");
+          // Redirect to onboarding for new users
+          setTimeout(() => {
+            router.push("/onboarding");
+          }, 1000);
+        }
+      } else {
+        // Sign in existing user
+        const { user } = await signIn(email, password);
+        
+        if (user) {
+          setToastMessage("Welcome back! Redirecting...");
+          // Redirect to dashboard (or onboarding if no profile)
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 1000);
+        }
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred. Please try again.";
+      setError(errorMessage);
       setLoading(false);
-      setToastMessage(
-        "Demo mode is active. We’ll take you to onboarding to get started."
-      );
-      setTimeout(() => {
-        router.push("/onboarding");
-      }, 700);
-    }, 600);
+    }
   };
 
   return (
@@ -180,6 +203,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                   setCompanyName={setCompanyName}
                   onSubmit={handleSubmit}
                   loading={loading}
+                  error={error}
                   secondaryText={
                     isSignup
                       ? "Already have an account?"

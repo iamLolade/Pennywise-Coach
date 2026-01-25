@@ -2,31 +2,29 @@
  * Transaction operations with Supabase
  */
 
-import { supabase } from "./client";
+import { createClientSupabaseClient } from "./auth-client";
 import type { Transaction } from "@/types";
 
 /**
- * Generate a simple user ID for MVP (in production, use Supabase Auth)
+ * Get the authenticated user ID from Supabase Auth
  */
-function getUserId(): string {
-  if (typeof window === "undefined") {
-    return "anonymous";
-  }
-  
-  let userId = localStorage.getItem("userId");
-  if (!userId) {
-    userId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem("userId", userId);
-  }
-  return userId;
+async function getUserId(): Promise<string | null> {
+  const supabase = createClientSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
 }
 
 /**
  * Get all transactions for the current user
  */
 export async function getTransactions(): Promise<Transaction[]> {
-  const userId = getUserId();
+  const userId = await getUserId();
 
+  if (!userId) {
+    return [];
+  }
+
+  const supabase = createClientSupabaseClient();
   const { data, error } = await supabase
     .from("transactions")
     .select("*")
@@ -55,8 +53,13 @@ export async function getTransactions(): Promise<Transaction[]> {
  * Save a transaction to Supabase
  */
 export async function saveTransaction(transaction: Omit<Transaction, "id">): Promise<Transaction> {
-  const userId = getUserId();
+  const userId = await getUserId();
 
+  if (!userId) {
+    throw new Error("User must be authenticated to save transactions");
+  }
+
+  const supabase = createClientSupabaseClient();
   const { data, error } = await supabase
     .from("transactions")
     .insert({
@@ -87,8 +90,13 @@ export async function saveTransaction(transaction: Omit<Transaction, "id">): Pro
  * Save multiple transactions to Supabase
  */
 export async function saveTransactions(transactions: Omit<Transaction, "id">[]): Promise<Transaction[]> {
-  const userId = getUserId();
+  const userId = await getUserId();
 
+  if (!userId) {
+    throw new Error("User must be authenticated to save transactions");
+  }
+
+  const supabase = createClientSupabaseClient();
   const { data, error } = await supabase
     .from("transactions")
     .insert(
@@ -120,8 +128,13 @@ export async function saveTransactions(transactions: Omit<Transaction, "id">[]):
  * Delete all transactions for the current user (useful for testing)
  */
 export async function clearTransactions(): Promise<void> {
-  const userId = getUserId();
+  const userId = await getUserId();
 
+  if (!userId) {
+    throw new Error("User must be authenticated to clear transactions");
+  }
+
+  const supabase = createClientSupabaseClient();
   const { error } = await supabase
     .from("transactions")
     .delete()
