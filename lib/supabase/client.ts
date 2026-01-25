@@ -1,9 +1,10 @@
 /**
- * Supabase client for database operations
+ * Legacy Supabase client - kept for backward compatibility
  * 
- * This module provides a singleton Supabase client instance.
- * Make sure to set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
- * in your .env.local file.
+ * @deprecated Use createClientSupabaseClient() for client components
+ * or createServerSupabaseClient() for server components/API routes
+ * 
+ * This module is kept for existing code that hasn't been migrated yet.
  */
 
 import { createClient } from "@supabase/supabase-js";
