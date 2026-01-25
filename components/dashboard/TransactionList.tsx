@@ -25,13 +25,13 @@ export function TransactionList({
 
   if (displayTransactions.length === 0) {
     return (
-      <Card className="border-border bg-card">
+      <Card className="border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No transactions found. Complete onboarding to generate sample data.
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            No transactions found. Add transactions to see your recent activity here.
           </p>
         </CardContent>
       </Card>
@@ -39,12 +39,12 @@ export function TransactionList({
   }
 
   return (
-    <Card className="border-border bg-card">
+    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Recent Transactions</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
+        <div className="space-y-0">
           {displayTransactions.map((transaction, index) => {
             const isIncome = transaction.amount > 0;
             const amountColor = isIncome ? "text-success" : "text-foreground";
@@ -55,13 +55,13 @@ export function TransactionList({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="flex items-center justify-between border-b border-border pb-3 last:border-0 last:pb-0"
+                className="flex items-center justify-between py-3 px-1 -mx-1 rounded-md hover:bg-muted/50 transition-colors border-b border-border last:border-0 last:pb-0 first:pt-0"
               >
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pr-4">
                   <p className="text-sm font-medium text-foreground truncate">
                     {transaction.description}
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1.5">
                     <span className="text-xs text-muted-foreground">
                       {transaction.category}
                     </span>
@@ -71,7 +71,7 @@ export function TransactionList({
                     </span>
                   </div>
                 </div>
-                <div className={`ml-4 text-sm font-semibold ${amountColor}`}>
+                <div className={`text-base font-semibold whitespace-nowrap ${amountColor}`}>
                   {isIncome ? "+" : "-"}
                   {formatCurrency(Math.abs(transaction.amount))}
                 </div>

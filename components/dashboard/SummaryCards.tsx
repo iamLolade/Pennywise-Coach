@@ -48,7 +48,7 @@ export function SummaryCards({ transactions }: SummaryCardsProps) {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card, index) => (
         <motion.div
           key={card.title}
@@ -57,17 +57,17 @@ export function SummaryCards({ transactions }: SummaryCardsProps) {
           animate="visible"
           transition={{ delay: index * 0.1 }}
         >
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-semibold ${card.color}`}>
+            <CardContent className="pt-0">
+              <div className={`text-3xl font-bold ${card.color} mb-2`}>
                 {card.value}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 {card.description}
               </p>
             </CardContent>

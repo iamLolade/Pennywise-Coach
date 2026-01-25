@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
 import { AnimatedAuthForm } from "@/components/auth/AnimatedAuthForm";
 import { Card } from "@/components/ui/card";
 import { signIn, signUp } from "@/lib/supabase/auth";
+import { showError, showSuccess } from "@/lib/utils";
 
 type AuthMode = "signin" | "signup";
 
@@ -53,12 +55,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const [companyName, setCompanyName] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | undefined>();
-  const [toastMessage, setToastMessage] = React.useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(undefined);
-    setToastMessage(null);
     setLoading(true);
 
     try {
@@ -67,7 +67,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         const { user } = await signUp(email, password);
         
         if (user) {
-          setToastMessage("Account created successfully! Redirecting...");
+          showSuccess("Account created successfully! Redirecting...");
           // Redirect to onboarding for new users
           setTimeout(() => {
             router.push("/onboarding");
@@ -78,7 +78,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         const { user } = await signIn(email, password);
         
         if (user) {
-          setToastMessage("Welcome back! Redirecting...");
+          showSuccess("Welcome back! Redirecting...");
           // Redirect to the requested page or dashboard
           setTimeout(() => {
             router.push(redirectTo);
@@ -86,28 +86,32 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         }
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An error occurred. Please try again.";
-      setError(errorMessage);
+      showError(err, "auth");
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {toastMessage ? (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="fixed right-4 top-4 z-50 w-[320px] rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground shadow-lg"
-        >
-          {toastMessage}
-        </motion.div>
-      ) : null}
-
       <header className="relative z-10">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-6">
-          <Link href="/" className="text-lg font-semibold">
-            Pennywise Coach
+          <Link href="/" className="flex items-center gap-2.5 text-lg font-semibold transition hover:opacity-80">
+            <div className="relative h-10 w-10 flex-shrink-0">
+              <Image
+                src="/mascot.png"
+                alt="Pennywise Coach Mascot"
+                fill
+                className="object-contain"
+                priority
+                unoptimized
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
+            <span className="bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent font-bold tracking-tight">
+              Pennywise Coach
+            </span>
           </Link>
           <div className="flex items-center gap-3">
             {isSignup ? (

@@ -12,7 +12,7 @@ export const Card = React.forwardRef<
     <div
       ref={ref}
       className={cx(
-        "rounded-xl border border-border bg-card text-foreground shadow-sm",
+        "rounded-xl border border-border bg-card text-foreground shadow-sm transition-shadow",
         className
       )}
       {...props}
@@ -27,7 +27,7 @@ export const CardHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => {
   return (
-    <div className={cx("flex flex-col gap-1", className)} {...props} />
+    <div className={cx("flex flex-col gap-1.5 p-6 pb-4", className)} {...props} />
   );
 };
 
@@ -53,7 +53,7 @@ export const CardContent = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => {
-  return <div className={cx("pt-4", className)} {...props} />;
+  return <div className={cx("px-6 pb-6", className)} {...props} />;
 };
 
 export const CardFooter = ({
@@ -61,6 +61,6 @@ export const CardFooter = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => {
   return (
-    <div className={cx("flex items-center pt-4", className)} {...props} />
+    <div className={cx("flex items-center px-6 pb-6 pt-4", className)} {...props} />
   );
 };

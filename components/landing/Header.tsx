@@ -15,9 +15,9 @@ export function Header() {
       <Container className="flex items-center justify-between py-4">
         <SmoothScrollLink
           href="#hero"
-          className="flex items-center gap-2 text-lg font-semibold text-foreground transition hover:opacity-80"
+          className="flex items-center gap-3 text-lg font-semibold text-foreground transition hover:opacity-80"
         >
-          <div className="relative h-8 w-8 flex-shrink-0">
+          <div className="relative h-12 w-12 flex-shrink-0">
             <Image
               src="/mascot.png"
               alt="Pennywise Coach Mascot"
@@ -34,28 +34,28 @@ export function Header() {
             Pennywise Coach
           </span>
         </SmoothScrollLink>
-        <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+        <nav className="hidden items-center gap-1 text-sm md:flex">
           <SmoothScrollLink
             href="#features"
-            className="transition hover:text-foreground"
+            className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
           >
             Features
           </SmoothScrollLink>
           <SmoothScrollLink
             href="#how-it-works"
-            className="transition hover:text-foreground"
+            className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
           >
             How it works
           </SmoothScrollLink>
           <SmoothScrollLink
             href="#pricing"
-            className="transition hover:text-foreground"
+            className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
           >
             Pricing
           </SmoothScrollLink>
           <SmoothScrollLink
             href="#faq"
-            className="transition hover:text-foreground"
+            className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
           >
             FAQ
           </SmoothScrollLink>

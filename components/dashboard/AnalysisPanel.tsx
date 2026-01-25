@@ -30,7 +30,7 @@ export function AnalysisPanel({
 }: AnalysisPanelProps) {
   if (isLoading) {
     return (
-      <Card className="border-border bg-card">
+      <Card className="border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Your Financial Insights</CardTitle>
           <CardDescription>
@@ -55,7 +55,7 @@ export function AnalysisPanel({
 
   if (error) {
     return (
-      <Card className="border-border bg-card">
+      <Card className="border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Your Financial Insights</CardTitle>
           <CardDescription>
@@ -78,7 +78,7 @@ export function AnalysisPanel({
 
   if (!analysis) {
     return (
-      <Card className="border-border bg-card">
+      <Card className="border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Your Financial Insights</CardTitle>
           <CardDescription>
@@ -95,9 +95,9 @@ export function AnalysisPanel({
   }
 
   return (
-    <Card className="border-border bg-card">
+    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Your Financial Insights</CardTitle>
+        <CardTitle className="text-xl font-semibold">Your Financial Insights</CardTitle>
         <CardDescription>
           A clear, supportive overview of your spending patterns.
         </CardDescription>
@@ -108,9 +108,9 @@ export function AnalysisPanel({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="space-y-2"
+            className="space-y-3"
           >
-            <h3 className="text-sm font-semibold text-foreground">Overview</h3>
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Overview</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">{analysis.summary}</p>
           </motion.div>
 
@@ -118,9 +118,9 @@ export function AnalysisPanel({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="space-y-2"
+            className="space-y-3"
           >
-            <h3 className="text-sm font-semibold text-foreground">What We Noticed</h3>
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">What We Noticed</h3>
             {analysis.patterns.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 As you continue tracking your spending, we'll start to notice helpful patterns that can guide your decisions.
@@ -141,9 +141,9 @@ export function AnalysisPanel({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="space-y-2"
+            className="space-y-3"
           >
-            <h3 className="text-sm font-semibold text-foreground">Ways to Improve</h3>
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Ways to Improve</h3>
             {analysis.suggestions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Keep tracking your spending—we'll provide personalized suggestions as we learn more about your habits.
@@ -165,9 +165,9 @@ export function AnalysisPanel({
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="space-y-2"
+              className="space-y-3"
             >
-              <h3 className="text-sm font-semibold text-foreground">Things That Stand Out</h3>
+              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Things That Stand Out</h3>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
                 {analysis.anomalies.map((anomaly) => (
                   <li key={anomaly} className="flex gap-2.5">

@@ -6,11 +6,12 @@ import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { saveUserProfile } from "@/lib/supabase/user";
+import { showError, showSuccess } from "@/lib/utils";
 import type { UserProfile } from "@/types";
 
-const incomeRanges = [
+const incomeRanges: SelectOption[] = [
   { value: "under-30k", label: "Under $30,000" },
   { value: "30k-50k", label: "$30,000 - $50,000" },
   { value: "50k-75k", label: "$50,000 - $75,000" },
@@ -63,7 +64,6 @@ export function OnboardingForm() {
   const [selectedGoals, setSelectedGoals] = React.useState<string[]>([]);
   const [selectedConcerns, setSelectedConcerns] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | undefined>();
 
   const toggleGoal = (goalId: string) => {
     setSelectedGoals((prev) =>
@@ -81,15 +81,14 @@ export function OnboardingForm() {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(undefined);
 
     if (!incomeRange) {
-      setError("Please select your income range");
+      showError("Please select your income range");
       return;
     }
 
     if (selectedGoals.length === 0) {
-      setError("Please select at least one financial goal");
+      showError("Please select at least one financial goal");
       return;
     }
 
@@ -105,11 +104,12 @@ export function OnboardingForm() {
     // Save to Supabase
     saveUserProfile(userProfile)
       .then(() => {
+        showSuccess("Your profile is saved. Redirecting...");
         router.push("/dashboard");
       })
       .catch((err) => {
         console.error("Failed to save user profile:", err);
-        setError("Failed to save your information. Please try again.");
+        showError(err, "general");
         setLoading(false);
       });
   };
@@ -139,17 +139,13 @@ export function OnboardingForm() {
               </label>
               <Select
                 id="incomeRange"
+                name="incomeRange"
+                options={incomeRanges}
                 value={incomeRange}
-                onChange={(e) => setIncomeRange(e.target.value)}
+                onChange={(value) => setIncomeRange(value)}
+                placeholder="Select an option"
                 required
-              >
-                <option value="">Select an option</option>
-                {incomeRanges.map((range) => (
-                  <option key={range.value} value={range.value}>
-                    {range.label}
-                  </option>
-                ))}
-              </Select>
+              />
             </motion.div>
 
             <motion.div variants={itemVariants} className="space-y-3">
@@ -199,16 +195,6 @@ export function OnboardingForm() {
                 ))}
               </div>
             </motion.div>
-
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
-              >
-                {error}
-              </motion.div>
-            )}
 
             <motion.div variants={itemVariants}>
               <Button

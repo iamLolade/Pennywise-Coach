@@ -94,3 +94,12 @@
     font-family: var(--font-plus-jakarta-sans), system-ui, -apple-system, sans-serif;
   }
 }
+
+/* React Select customizations */
+.react-select__control {
+  font-family: var(--font-plus-jakarta-sans), system-ui, -apple-system, sans-serif;
+}
+
+.react-select__menu {
+  font-family: var(--font-plus-jakarta-sans), system-ui, -apple-system, sans-serif;
+}
