@@ -15,12 +15,18 @@ export interface OpikTrace {
   modelVersion?: string;
   input: {
     userProfile: unknown;
-    transactions: unknown;
+    transactions?: unknown;
     userQuestion?: string;
+    conversationHistory?: unknown;
+    currentQuestion?: string;
+    type?: string;
+    [key: string]: unknown; // Allow additional input fields
   };
   output: {
-    response: string;
+    response?: string;
     suggestedActions?: string[];
+    insight?: unknown;
+    [key: string]: unknown; // Allow additional output fields
   };
   metadata: {
     timestamp: string;
@@ -29,6 +35,9 @@ export interface OpikTrace {
       input: number;
       output: number;
     };
+    usedAI?: boolean;
+    type?: string;
+    [key: string]: unknown; // Allow additional metadata fields
   };
 }
 

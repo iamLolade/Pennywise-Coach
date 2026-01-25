@@ -163,9 +163,8 @@ export function CoachChat({ userProfile }: CoachChatProps) {
             {messages.length > 0 && (
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={() => setShowClearModal(true)}
-                className="text-muted-foreground hover:text-destructive"
+                className="h-9 px-3 text-sm text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Clear

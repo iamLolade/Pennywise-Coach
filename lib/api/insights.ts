@@ -2,8 +2,8 @@
  * Client-side utility to call the insights API route
  */
 
-import { PROMPT_VERSIONS } from "@/lib/ai/prompts";
-import type { PromptVersion, Transaction, UserProfile } from "@/types";
+import { PROMPT_VERSIONS, type PromptVersion } from "@/lib/ai/prompts";
+import type { Transaction, UserProfile } from "@/types";
 
 export interface InsightResponse {
   insight: {

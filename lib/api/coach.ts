@@ -2,8 +2,8 @@
  * Client-side utility to call the coach API route
  */
 
-import { getCoachPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
-import type { CoachMessage, PromptVersion, UserProfile } from "@/types";
+import { getCoachPrompt, PROMPT_VERSIONS, type PromptVersion } from "@/lib/ai/prompts";
+import type { CoachMessage, UserProfile } from "@/types";
 
 export interface CoachResponse {
   response: string;
