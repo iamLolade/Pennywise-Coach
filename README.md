@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pennywise Coach
+
+Pennywise Coach is a web-based AI financial health assistant that helps people understand their spending, build healthier money habits, and make confident decisions through calm, non-judgmental guidance. Built for hackathon submission with a focus on clarity, empathy, and responsible AI.
+
+## Product Goals
+
+- Reduce financial anxiety by explaining spending in plain language
+- Provide gentle, practical coaching and next steps
+- Highlight patterns without shame or complexity
+- Keep the UI minimal, calm, and easy to navigate
+
+## Core Features (MVP)
+
+- **Onboarding**: capture income range, goals, concerns, and currency
+- **Dashboard**: spending summary, categories, transactions, and AI analysis
+- **Coach**: conversational AI guidance with saved history
+- **Insights**: daily and weekly guidance with AI generation
+- **Settings**: update onboarding preferences anytime
+
+## Tech Stack
+
+- **Next.js (App Router)**, **React**, **TypeScript**
+- **Tailwind CSS v4**, **Framer Motion**
+- **Supabase** for auth + data storage
+- **Hugging Face Inference API** for AI responses
+- **Opik** for observability and evaluation
+- **react-hot-toast**, **react-select**, **lucide-react**
+
+## Project Structure
+
+- `app/` — Next.js routes (auth + dashboard groups)
+- `components/` — reusable UI, dashboard, coach, insights
+- `lib/ai/` — prompts + Hugging Face integration
+- `lib/supabase/` — auth + database helpers
+- `lib/api/` — client-side API wrappers
+- `docs/` — design + Opik plans
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local`:
 
-## Learn More
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+HUGGINGFACE_API_KEY=your_huggingface_api_key
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Supabase Setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run the schema in `lib/supabase/schema.sql` in the Supabase SQL editor.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Tables included:
+- `user_profiles`
+- `transactions`
+- `coach_conversations`
+- `insights`
 
-## Deploy on Vercel
+## AI + Opik Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Prompts are versioned in `lib/ai/prompts.ts`
+- Trace logging lives in `lib/opik/client.ts`
+- Coach + Insights endpoints log traces for evaluation
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts
+
+```
+npm run dev
+npm run build
+npm run start
+```
+
+## Deployment
+
+Deploy on Vercel or any Next.js host. Make sure the env vars are set and the Supabase schema has been applied.
+
+## License
+
+MIT
