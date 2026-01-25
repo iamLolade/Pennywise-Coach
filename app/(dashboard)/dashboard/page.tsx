@@ -9,6 +9,7 @@ import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { TransactionList } from "@/components/dashboard/TransactionList";
 import { analyzeSpending } from "@/lib/api/analyze";
 import { generateMockTransactions } from "@/lib/data/mockData";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile } from "@/lib/supabase/user";
 import { getTransactions, saveTransactions } from "@/lib/supabase/transactions";
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
@@ -26,6 +27,13 @@ export default function DashboardPage() {
   React.useEffect(() => {
     async function loadData() {
       try {
+        // Check if user is authenticated
+        const user = await getCurrentUser();
+        if (!user) {
+          router.push("/signin?redirect=/dashboard");
+          return;
+        }
+
         // Get user profile from Supabase
         const userProfile = await getUserProfile();
         if (!userProfile || !userProfile.onboardingComplete) {

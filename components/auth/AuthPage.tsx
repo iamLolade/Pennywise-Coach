@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
 import { AnimatedAuthForm } from "@/components/auth/AnimatedAuthForm";
@@ -40,7 +40,9 @@ const socialProof = {
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isSignup = mode === "signup";
+  const redirectTo = searchParams.get("redirect") || (isSignup ? "/onboarding" : "/dashboard");
   const subcopy = isSignup
     ? "Get a supportive AI coach that explains spending in plain language and helps you take the next step without overwhelm."
     : "Pick up right where you left off and continue building better financial habits.";
@@ -77,9 +79,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         
         if (user) {
           setToastMessage("Welcome back! Redirecting...");
-          // Redirect to dashboard (or onboarding if no profile)
+          // Redirect to the requested page or dashboard
           setTimeout(() => {
-            router.push("/dashboard");
+            router.push(redirectTo);
           }, 1000);
         }
       }
