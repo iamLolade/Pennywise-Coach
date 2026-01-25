@@ -14,6 +14,7 @@ import type { Transaction } from "@/types";
 
 interface SummaryCardsProps {
   transactions: Transaction[];
+  currency?: string;
 }
 
 const cardVariants = {
@@ -21,7 +22,7 @@ const cardVariants = {
   visible: { y: 0, opacity: 1, transition: { duration: 0.5, ease: "easeOut" } },
 };
 
-export function SummaryCards({ transactions }: SummaryCardsProps) {
+export function SummaryCards({ transactions, currency = "USD" }: SummaryCardsProps) {
   const totalIncome = calculateTotalIncome(transactions);
   const totalExpenses = calculateTotalExpenses(transactions);
   const net = calculateNet(transactions);
@@ -29,19 +30,19 @@ export function SummaryCards({ transactions }: SummaryCardsProps) {
   const cards = [
     {
       title: "Total Income",
-      value: formatCurrency(totalIncome),
+      value: formatCurrency(totalIncome, currency),
       description: "All income sources",
       color: "text-success",
     },
     {
       title: "Total Expenses",
-      value: formatCurrency(totalExpenses),
+      value: formatCurrency(totalExpenses, currency),
       description: "All spending",
       color: "text-foreground",
     },
     {
       title: "Net Amount",
-      value: formatCurrency(net),
+      value: formatCurrency(net, currency),
       description: net >= 0 ? "You're saving!" : "You're overspending",
       color: net >= 0 ? "text-success" : "text-destructive",
     },

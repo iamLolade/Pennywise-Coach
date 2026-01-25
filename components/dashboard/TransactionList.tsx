@@ -14,11 +14,13 @@ import type { Transaction } from "@/types";
 interface TransactionListProps {
   transactions: Transaction[];
   limit?: number;
+  currency?: string;
 }
 
 export function TransactionList({
   transactions,
   limit = 20,
+  currency = "USD",
 }: TransactionListProps) {
   const recentTransactions = getRecentTransactions(transactions, 30);
   const displayTransactions = recentTransactions.slice(0, limit);
@@ -73,7 +75,7 @@ export function TransactionList({
                 </div>
                 <div className={`text-base font-semibold whitespace-nowrap ${amountColor}`}>
                   {isIncome ? "+" : "-"}
-                  {formatCurrency(Math.abs(transaction.amount))}
+                  {formatCurrency(Math.abs(transaction.amount), currency)}
                 </div>
               </motion.div>
             );

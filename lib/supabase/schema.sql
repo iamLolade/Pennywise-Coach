@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   income_range TEXT NOT NULL,
   goals TEXT[] NOT NULL DEFAULT '{}',
   concerns TEXT[] NOT NULL DEFAULT '{}',
+  currency TEXT NOT NULL DEFAULT 'USD', -- Currency code (USD, EUR, GBP, etc.)
   onboarding_complete BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

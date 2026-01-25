@@ -8,7 +8,10 @@ import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { TransactionList } from "@/components/dashboard/TransactionList";
+import { TransactionForm } from "@/components/transactions/TransactionForm";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Modal } from "@/components/ui/modal";
 import { analyzeSpending } from "@/lib/api/analyze";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile } from "@/lib/supabase/user";
@@ -18,12 +21,15 @@ import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 export default function DashboardPage() {
   const router = useRouter();
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [analysis, setAnalysis] = React.useState<SpendingAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [analysisError, setAnalysisError] = React.useState<string | null>(null);
   const [traceId, setTraceId] = React.useState<string | null>(null);
   const [promptVersion, setPromptVersion] = React.useState<string | null>(null);
+  const [showAddTransactionModal, setShowAddTransactionModal] = React.useState(false);
+  const [isSavingTransaction, setIsSavingTransaction] = React.useState(false);
 
   React.useEffect(() => {
     async function loadData() {
@@ -36,11 +42,13 @@ export default function DashboardPage() {
         }
 
         // Get user profile from Supabase
-        const userProfile = await getUserProfile();
-        if (!userProfile || !userProfile.onboardingComplete) {
+        const profile = await getUserProfile();
+        if (!profile || !profile.onboardingComplete) {
           router.push("/onboarding");
           return;
         }
+
+        setUserProfile(profile);
 
         // Get transactions from Supabase
         const userTransactions = await getTransactions();
@@ -51,7 +59,7 @@ export default function DashboardPage() {
           // Trigger AI analysis
           setAnalysisLoading(true);
           setAnalysisError(null);
-          analyzeSpending(userProfile, userTransactions)
+          analyzeSpending(profile, userTransactions)
             .then((response) => {
               setAnalysis(response.analysis);
               setTraceId(response.traceId);
@@ -85,20 +93,48 @@ export default function DashboardPage() {
 
   const hasTransactions = transactions.length > 0;
 
+  const handleAddTransaction = async (transactionData: Omit<Transaction, "id">) => {
+    setIsSavingTransaction(true);
+    try {
+      // TODO: Implement save to Supabase in Phase 3
+      console.log("Transaction to save:", transactionData);
+      // For now, just close the modal
+      setShowAddTransactionModal(false);
+      // Show success message
+      alert("Transaction added! (Save functionality will be implemented in Phase 3)");
+    } catch (error) {
+      console.error("Failed to save transaction:", error);
+      alert("Failed to save transaction. Please try again.");
+    } finally {
+      setIsSavingTransaction(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-        <div className="mb-8 lg:mb-12">
-          <h1 className="text-3xl lg:text-4xl font-semibold text-foreground mb-2">
-            Dashboard
-          </h1>
-          <p className="text-sm lg:text-base text-muted-foreground">
-            Overview of your financial activity and insights
-          </p>
+        <div className="mb-8 lg:mb-12 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-semibold text-foreground mb-2">
+              Dashboard
+            </h1>
+            <p className="text-sm lg:text-base text-muted-foreground">
+              Overview of your financial activity and insights
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowAddTransactionModal(true)}
+            className="hidden sm:inline-flex"
+          >
+            Add Transaction
+          </Button>
         </div>
 
         <div className="space-y-6 lg:space-y-8">
-          <SummaryCards transactions={transactions} />
+          <SummaryCards 
+            transactions={transactions} 
+            currency={userProfile?.currency || "USD"} 
+          />
 
           {!hasTransactions ? (
             <Card className="border-border bg-card shadow-sm">
@@ -111,11 +147,17 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
                   Once you start tracking your spending, you'll see detailed breakdowns,
                   spending patterns, and tailored suggestions to help you reach your
                   financial goals.
                 </p>
+                <Button
+                  onClick={() => setShowAddTransactionModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  Add Your First Transaction
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -128,13 +170,33 @@ export default function DashboardPage() {
                 promptVersion={promptVersion}
               />
               <div className="grid gap-6 lg:gap-8 lg:grid-cols-2">
-                <CategoryBreakdown transactions={transactions} />
-                <TransactionList transactions={transactions} />
+                <CategoryBreakdown 
+                  transactions={transactions} 
+                  currency={userProfile?.currency || "USD"} 
+                />
+                <TransactionList 
+                  transactions={transactions} 
+                  currency={userProfile?.currency || "USD"} 
+                />
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Add Transaction Modal */}
+      <Modal
+        isOpen={showAddTransactionModal}
+        onClose={() => setShowAddTransactionModal(false)}
+        title="Add Transaction"
+        size="md"
+      >
+        <TransactionForm
+          onSubmit={handleAddTransaction}
+          onCancel={() => setShowAddTransactionModal(false)}
+          isLoading={isSavingTransaction}
+        />
+      </Modal>
     </div>
   );
 }

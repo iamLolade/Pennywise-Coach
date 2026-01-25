@@ -21,6 +21,22 @@ const incomeRanges: SelectOption[] = [
   { value: "prefer-not-to-say", label: "Prefer not to say" },
 ];
 
+const currencies: SelectOption[] = [
+  { value: "USD", label: "US Dollar ($)" },
+  { value: "EUR", label: "Euro (€)" },
+  { value: "GBP", label: "British Pound (£)" },
+  { value: "CAD", label: "Canadian Dollar (C$)" },
+  { value: "AUD", label: "Australian Dollar (A$)" },
+  { value: "JPY", label: "Japanese Yen (¥)" },
+  { value: "CHF", label: "Swiss Franc (CHF)" },
+  { value: "CNY", label: "Chinese Yuan (¥)" },
+  { value: "INR", label: "Indian Rupee (₹)" },
+  { value: "BRL", label: "Brazilian Real (R$)" },
+  { value: "MXN", label: "Mexican Peso (Mex$)" },
+  { value: "ZAR", label: "South African Rand (R)" },
+  { value: "NGN", label: "Nigerian Naira (₦)" },
+];
+
 const financialGoals = [
   { id: "build-emergency-fund", label: "Build an emergency fund" },
   { id: "pay-off-debt", label: "Pay off debt" },
@@ -61,6 +77,7 @@ const itemVariants = {
 export function OnboardingForm() {
   const router = useRouter();
   const [incomeRange, setIncomeRange] = React.useState("");
+  const [currency, setCurrency] = React.useState("USD");
   const [selectedGoals, setSelectedGoals] = React.useState<string[]>([]);
   const [selectedConcerns, setSelectedConcerns] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -96,6 +113,7 @@ export function OnboardingForm() {
 
     const userProfile: UserProfile = {
       incomeRange,
+      currency: currency || "USD",
       goals: selectedGoals,
       concerns: selectedConcerns,
       onboardingComplete: true,
@@ -144,6 +162,24 @@ export function OnboardingForm() {
                 value={incomeRange}
                 onChange={(value) => setIncomeRange(value)}
                 placeholder="Select an option"
+                required
+              />
+            </motion.div>
+
+            <motion.div variants={itemVariants} className="space-y-2">
+              <label
+                htmlFor="currency"
+                className="text-sm font-medium text-foreground"
+              >
+                What currency do you use?
+              </label>
+              <Select
+                id="currency"
+                name="currency"
+                options={currencies}
+                value={currency}
+                onChange={(value) => setCurrency(value)}
+                placeholder="Select your currency"
                 required
               />
             </motion.div>

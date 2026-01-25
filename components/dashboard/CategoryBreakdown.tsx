@@ -13,9 +13,10 @@ import type { Transaction } from "@/types";
 
 interface CategoryBreakdownProps {
   transactions: Transaction[];
+  currency?: string;
 }
 
-export function CategoryBreakdown({ transactions }: CategoryBreakdownProps) {
+export function CategoryBreakdown({ transactions, currency = "USD" }: CategoryBreakdownProps) {
   const byCategory = calculateByCategory(transactions);
   const topCategories = getTopCategories(byCategory, 5);
   const totalExpenses = topCategories.reduce((sum, cat) => sum + cat.amount, 0);
@@ -61,7 +62,7 @@ export function CategoryBreakdown({ transactions }: CategoryBreakdownProps) {
                       {percentage.toFixed(1)}%
                     </span>
                     <span className="text-sm font-semibold text-foreground">
-                      {formatCurrency(item.amount)}
+                      {formatCurrency(item.amount, currency)}
                     </span>
                   </div>
                 </div>

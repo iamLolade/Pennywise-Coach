@@ -48,6 +48,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     incomeRange: data.income_range,
     goals: data.goals,
     concerns: data.concerns,
+    currency: data.currency || "USD", // Default to USD if not set
     onboardingComplete: data.onboarding_complete,
   };
 }
@@ -71,6 +72,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
         income_range: profile.incomeRange,
         goals: profile.goals,
         concerns: profile.concerns,
+        currency: profile.currency || "USD", // Default to USD if not provided
         onboarding_complete: profile.onboardingComplete,
         updated_at: new Date().toISOString(),
       },

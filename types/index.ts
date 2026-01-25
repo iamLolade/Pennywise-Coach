@@ -6,6 +6,7 @@ export interface UserProfile {
   incomeRange: string;
   goals: string[];
   concerns: string[];
+  currency: string; // Currency code (USD, EUR, GBP, etc.)
   onboardingComplete: boolean;
 }
 

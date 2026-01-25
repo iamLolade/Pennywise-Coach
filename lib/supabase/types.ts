@@ -14,6 +14,7 @@ export interface Database {
           income_range: string;
           goals: string[];
           concerns: string[];
+          currency: string;
           onboarding_complete: boolean;
           created_at: string;
           updated_at: string;
@@ -24,6 +25,7 @@ export interface Database {
           income_range: string;
           goals: string[];
           concerns: string[];
+          currency?: string;
           onboarding_complete?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -34,6 +36,7 @@ export interface Database {
           income_range?: string;
           goals?: string[];
           concerns?: string[];
+          currency?: string;
           onboarding_complete?: boolean;
           updated_at?: string;
         };
