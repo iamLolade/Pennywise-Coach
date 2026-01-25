@@ -15,7 +15,8 @@ import { Modal } from "@/components/ui/modal";
 import { analyzeSpending } from "@/lib/api/analyze";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile } from "@/lib/supabase/user";
-import { getTransactions } from "@/lib/supabase/transactions";
+import { getTransactions, saveTransaction } from "@/lib/supabase/transactions";
+import { showError, showSuccess } from "@/lib/utils";
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 
 export default function DashboardPage() {
@@ -96,15 +97,41 @@ export default function DashboardPage() {
   const handleAddTransaction = async (transactionData: Omit<Transaction, "id">) => {
     setIsSavingTransaction(true);
     try {
-      // TODO: Implement save to Supabase in Phase 3
-      console.log("Transaction to save:", transactionData);
-      // For now, just close the modal
+      // Save transaction to Supabase
+      const savedTransaction = await saveTransaction(transactionData);
+      
+      // Add to local state
+      const updatedTransactions = [savedTransaction, ...transactions];
+      setTransactions(updatedTransactions);
+
+      // Close modal
       setShowAddTransactionModal(false);
+
       // Show success message
-      alert("Transaction added! (Save functionality will be implemented in Phase 3)");
+      showSuccess("Transaction added successfully!");
+
+      // If we have a user profile, trigger AI analysis
+      if (userProfile && updatedTransactions.length > 0) {
+        setAnalysisLoading(true);
+        setAnalysisError(null);
+        
+        analyzeSpending(userProfile, updatedTransactions)
+          .then((response) => {
+            setAnalysis(response.analysis);
+            setTraceId(response.traceId);
+            setPromptVersion(response.promptVersion);
+          })
+          .catch((error: Error) => {
+            console.error("Failed to analyze spending:", error);
+            setAnalysisError("We couldn't generate insights yet. Try again soon.");
+          })
+          .finally(() => {
+            setAnalysisLoading(false);
+          });
+      }
     } catch (error) {
       console.error("Failed to save transaction:", error);
-      alert("Failed to save transaction. Please try again.");
+      showError(error, "general");
     } finally {
       setIsSavingTransaction(false);
     }
