@@ -55,7 +55,7 @@ export async function analyzeWithHuggingFace(
     }
 
     const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-    
+
     // Handle array response (some models return arrays)
     const result = Array.isArray(data) ? data[0] : data;
 
@@ -108,7 +108,7 @@ export async function getCoachResponse(prompt: string): Promise<string> {
     }
 
     const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-    
+
     // Handle array response (some models return arrays)
     const result = Array.isArray(data) ? data[0] : data;
 
@@ -117,7 +117,7 @@ export async function getCoachResponse(prompt: string): Promise<string> {
     }
 
     const generatedText = result.generated_text || "";
-    
+
     // Clean up the response - remove any markdown or extra formatting
     return generatedText.trim();
   } catch (error) {
@@ -138,7 +138,7 @@ function parseLLMResponse(
 ): SpendingAnalysis {
   // Clean the response text - remove markdown code blocks if present
   let cleanedText = responseText.trim();
-  
+
   // Remove markdown code blocks
   cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
   cleanedText = cleanedText.trim();
@@ -251,6 +251,59 @@ export function generateFallbackAnalysis(
 }
 
 /**
+ * Call Hugging Face API for daily/weekly insights generation
+ */
+export async function generateInsight(prompt: string): Promise<string> {
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
+  }
+
+  try {
+    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          max_new_tokens: 300,
+          temperature: 0.8,
+          return_full_text: false,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
+      );
+    }
+
+    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
+
+    // Handle array response (some models return arrays)
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result.error) {
+      throw new Error(`Hugging Face API error: ${result.error}`);
+    }
+
+    const generatedText = result.generated_text || "";
+
+    // Clean up the response
+    return generatedText.trim();
+  } catch (error) {
+    console.error("Hugging Face API error:", error);
+    throw error;
+  }
+}
+
+/**
  * Fallback coach response if AI fails
  */
 export function generateFallbackCoachResponse(
@@ -273,4 +326,54 @@ export function generateFallbackCoachResponse(
   }
 
   return `I'm here to help you with your financial journey. Based on your goals and concerns, I'd suggest starting with small, achievable steps. Remember, financial wellness is a journey, not a destination. What specific area would you like to focus on?`;
+}
+
+/**
+ * Fallback insight generation if AI fails
+ */
+export function generateFallbackInsight(
+  userProfile: UserProfile,
+  transactions: Transaction[],
+  type: "daily" | "weekly"
+): { title: string; content: string; suggestedAction: string } {
+  const totalIncome = transactions
+    .filter((t) => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+  const totalSpent = Math.abs(
+    transactions
+      .filter((t) => t.amount < 0)
+      .reduce((sum, t) => sum + t.amount, 0)
+  );
+  const net = totalIncome - totalSpent;
+
+  if (type === "daily") {
+    if (net > 0) {
+      return {
+        title: "You're on track today",
+        content: `You've spent $${Math.round(totalSpent)} today while earning $${Math.round(totalIncome)}. That's a positive balance of $${Math.round(net)}.`,
+        suggestedAction: "Consider setting aside a portion of today's surplus for your savings goals.",
+      };
+    } else {
+      return {
+        title: "Today's spending overview",
+        content: `You've spent $${Math.round(totalSpent)} today. Tracking your expenses is the first step to better financial awareness.`,
+        suggestedAction: "Review your transactions to identify any non-essential purchases you could reduce tomorrow.",
+      };
+    }
+  } else {
+    // Weekly
+    if (net > 0) {
+      return {
+        title: "Positive week ahead",
+        content: `This week you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}, leaving you with $${Math.round(net)}. That's progress!`,
+        suggestedAction: "Consider allocating a portion of this week's surplus toward your financial goals.",
+      };
+    } else {
+      return {
+        title: "Weekly spending pattern",
+        content: `This week you've spent $${Math.round(totalSpent)} across ${transactions.filter((t) => t.amount < 0).length} transactions. Understanding your patterns helps you make better decisions.`,
+        suggestedAction: "Look for one category where you can reduce spending by 10% next week.",
+      };
+    }
+  }
 }

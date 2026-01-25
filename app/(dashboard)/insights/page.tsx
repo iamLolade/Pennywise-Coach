@@ -1,7 +1,13 @@
 "use client";
 
+import * as React from "react";
+import { useRouter } from "next/navigation";
+
 import { InsightCard } from "@/components/insights/InsightCard";
-import type { DailyInsight } from "@/types";
+import { InsightsSkeleton } from "@/components/insights/InsightsSkeleton";
+import { getCurrentUser } from "@/lib/supabase/auth";
+import { getUserProfile } from "@/lib/supabase/user";
+import type { DailyInsight, UserProfile } from "@/types";
 
 const dailyInsights: DailyInsight[] = [
   {
@@ -46,6 +52,46 @@ const weeklyInsights: DailyInsight[] = [
 ];
 
 export default function InsightsPage() {
+  const router = useRouter();
+  const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function loadData() {
+      try {
+        // Check if user is authenticated
+        const user = await getCurrentUser();
+        if (!user) {
+          router.push("/signin?redirect=/insights");
+          return;
+        }
+
+        // Get user profile from Supabase
+        const profile = await getUserProfile();
+        if (!profile || !profile.onboardingComplete) {
+          router.push("/onboarding");
+          return;
+        }
+
+        setUserProfile(profile);
+      } catch (error) {
+        console.error("Failed to load user data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, [router]);
+
+  if (loading) {
+    return <InsightsSkeleton />;
+  }
+
+  if (!userProfile) {
+    return null;
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
       <div className="mb-8">
