@@ -74,6 +74,59 @@ export async function analyzeWithHuggingFace(
 }
 
 /**
+ * Call Hugging Face API for coach chat responses
+ */
+export async function getCoachResponse(prompt: string): Promise<string> {
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
+  }
+
+  try {
+    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          max_new_tokens: 500,
+          temperature: 0.8,
+          return_full_text: false,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
+      );
+    }
+
+    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
+    
+    // Handle array response (some models return arrays)
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result.error) {
+      throw new Error(`Hugging Face API error: ${result.error}`);
+    }
+
+    const generatedText = result.generated_text || "";
+    
+    // Clean up the response - remove any markdown or extra formatting
+    return generatedText.trim();
+  } catch (error) {
+    console.error("Hugging Face API error:", error);
+    throw error;
+  }
+}
+
+/**
  * Parse LLM response into SpendingAnalysis format
  * 
  * The LLM should return a JSON object with the analysis.
@@ -195,4 +248,29 @@ export function generateFallbackAnalysis(
     summary: `Based on your ${transactions.length} transactions, you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}.`,
     suggestions,
   };
+}
+
+/**
+ * Fallback coach response if AI fails
+ */
+export function generateFallbackCoachResponse(
+  userProfile: UserProfile,
+  question: string
+): string {
+  // Simple rule-based responses based on keywords
+  const lowerQuestion = question.toLowerCase();
+
+  if (lowerQuestion.includes("budget") || lowerQuestion.includes("spending")) {
+    return `I can help you understand your spending patterns. Based on your goals of ${userProfile.goals.join(", ")}, I'd suggest tracking your expenses regularly and identifying areas where you can make small adjustments. Every little bit helps!`;
+  }
+
+  if (lowerQuestion.includes("save") || lowerQuestion.includes("emergency")) {
+    return `Building savings takes time and consistency. Start by setting aside a small amount regularly, even if it's just a few dollars. Over time, these small contributions add up. You've got this!`;
+  }
+
+  if (lowerQuestion.includes("debt")) {
+    return `Managing debt can feel overwhelming, but you're taking the right steps by seeking help. Consider focusing on paying off high-interest debt first, and remember that progress, no matter how small, is still progress.`;
+  }
+
+  return `I'm here to help you with your financial journey. Based on your goals and concerns, I'd suggest starting with small, achievable steps. Remember, financial wellness is a journey, not a destination. What specific area would you like to focus on?`;
 }

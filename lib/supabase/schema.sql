@@ -60,3 +60,25 @@ CREATE TRIGGER update_user_profiles_updated_at
   BEFORE UPDATE ON user_profiles
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Coach conversations table
+CREATE TABLE IF NOT EXISTS coach_conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT fk_user_conversation FOREIGN KEY (user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE
+);
+
+-- Create indexes for conversations
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON coach_conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON coach_conversations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_created ON coach_conversations(user_id, created_at DESC);
+
+-- Enable RLS for conversations
+ALTER TABLE coach_conversations ENABLE ROW LEVEL SECURITY;
+
+-- Policy for conversations
+CREATE POLICY "Allow all operations for MVP" ON coach_conversations
+  FOR ALL USING (true) WITH CHECK (true);
