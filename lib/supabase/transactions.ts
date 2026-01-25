@@ -125,6 +125,70 @@ export async function saveTransactions(transactions: Omit<Transaction, "id">[]):
 }
 
 /**
+ * Update a transaction in Supabase
+ */
+export async function updateTransaction(
+  transactionId: string,
+  transaction: Omit<Transaction, "id">
+): Promise<Transaction> {
+  const userId = await getUserId();
+
+  if (!userId) {
+    throw new Error("User must be authenticated to update transactions");
+  }
+
+  const supabase = createClientSupabaseClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({
+      amount: transaction.amount,
+      category: transaction.category,
+      date: transaction.date,
+      description: transaction.description,
+    })
+    .eq("id", transactionId)
+    .eq("user_id", userId) // Ensure user owns this transaction
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating transaction:", error);
+    throw new Error("Failed to update transaction");
+  }
+
+  return {
+    id: data.id,
+    amount: Number(data.amount),
+    category: data.category,
+    date: data.date,
+    description: data.description,
+  };
+}
+
+/**
+ * Delete a transaction from Supabase
+ */
+export async function deleteTransaction(transactionId: string): Promise<void> {
+  const userId = await getUserId();
+
+  if (!userId) {
+    throw new Error("User must be authenticated to delete transactions");
+  }
+
+  const supabase = createClientSupabaseClient();
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", transactionId)
+    .eq("user_id", userId); // Ensure user owns this transaction
+
+  if (error) {
+    console.error("Error deleting transaction:", error);
+    throw new Error("Failed to delete transaction");
+  }
+}
+
+/**
  * Delete all transactions for the current user (useful for testing)
  */
 export async function clearTransactions(): Promise<void> {

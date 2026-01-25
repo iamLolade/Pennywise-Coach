@@ -80,6 +80,7 @@ export function TransactionForm({
     }
   }, [category]);
 
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 

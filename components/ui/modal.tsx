@@ -74,11 +74,11 @@ export function Modal({
             className={`relative z-10 w-full ${sizeClasses[size]} mx-4`}
             onClick={(e) => e.stopPropagation()}
           >
-            <Card className="border-border bg-card shadow-lg">
+            <Card className="border-border bg-card shadow-lg max-h-[90vh] overflow-hidden flex flex-col">
               <CardHeader>
                 <CardTitle className="text-xl font-semibold">{title}</CardTitle>
               </CardHeader>
-              <CardContent>{children}</CardContent>
+              <CardContent className="overflow-y-auto flex-1">{children}</CardContent>
             </Card>
           </motion.div>
         </div>

@@ -128,7 +128,7 @@ export default function Home() {
             </span>
             <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
               Understand your spending and take the next step with confidence.
-            </h1>
+          </h1>
             <p className="text-lg text-muted-foreground md:text-xl">
               Pennywise Coach translates your spending into plain language,
               highlights what matters, and offers realistic guidance without the

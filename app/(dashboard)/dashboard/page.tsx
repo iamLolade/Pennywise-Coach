@@ -15,8 +15,14 @@ import { Modal } from "@/components/ui/modal";
 import { analyzeSpending } from "@/lib/api/analyze";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile } from "@/lib/supabase/user";
-import { getTransactions, saveTransaction } from "@/lib/supabase/transactions";
+import {
+  getTransactions,
+  saveTransaction,
+  updateTransaction,
+  deleteTransaction,
+} from "@/lib/supabase/transactions";
 import { showError, showSuccess } from "@/lib/utils";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 
 export default function DashboardPage() {
@@ -30,6 +36,8 @@ export default function DashboardPage() {
   const [traceId, setTraceId] = React.useState<string | null>(null);
   const [promptVersion, setPromptVersion] = React.useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = React.useState(false);
+  const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
+  const [deletingTransaction, setDeletingTransaction] = React.useState<Transaction | null>(null);
   const [isSavingTransaction, setIsSavingTransaction] = React.useState(false);
 
   React.useEffect(() => {
@@ -137,6 +145,116 @@ export default function DashboardPage() {
     }
   };
 
+  const handleEditTransaction = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+  };
+
+  const handleUpdateTransaction = async (transactionData: Omit<Transaction, "id">) => {
+    if (!editingTransaction) return;
+
+    setIsSavingTransaction(true);
+    try {
+      // Update transaction in Supabase
+      const updatedTransaction = await updateTransaction(
+        editingTransaction.id,
+        transactionData
+      );
+
+      // Update local state
+      const updatedTransactions = transactions.map((t) =>
+        t.id === editingTransaction.id ? updatedTransaction : t
+      );
+      setTransactions(updatedTransactions);
+
+      // Close modal
+      setEditingTransaction(null);
+
+      // Show success message
+      showSuccess("Transaction updated successfully!");
+
+      // Refresh AI analysis
+      if (userProfile && updatedTransactions.length > 0) {
+        setAnalysisLoading(true);
+        setAnalysisError(null);
+
+        analyzeSpending(userProfile, updatedTransactions)
+          .then((response) => {
+            setAnalysis(response.analysis);
+            setTraceId(response.traceId);
+            setPromptVersion(response.promptVersion);
+          })
+          .catch((error: Error) => {
+            console.error("Failed to analyze spending:", error);
+            setAnalysisError("We couldn't generate insights yet. Try again soon.");
+          })
+          .finally(() => {
+            setAnalysisLoading(false);
+          });
+      }
+    } catch (error) {
+      console.error("Failed to update transaction:", error);
+      showError(error, "general");
+    } finally {
+      setIsSavingTransaction(false);
+    }
+  };
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    setDeletingTransaction(transaction);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingTransaction) return;
+
+    setIsSavingTransaction(true);
+    try {
+      // Delete transaction from Supabase
+      await deleteTransaction(deletingTransaction.id);
+
+      // Update local state
+      const updatedTransactions = transactions.filter(
+        (t) => t.id !== deletingTransaction.id
+      );
+      setTransactions(updatedTransactions);
+
+      // Close modal
+      setDeletingTransaction(null);
+
+      // Show success message
+      showSuccess("Transaction deleted successfully!");
+
+      // Refresh AI analysis
+      if (userProfile && updatedTransactions.length > 0) {
+        setAnalysisLoading(true);
+        setAnalysisError(null);
+
+        analyzeSpending(userProfile, updatedTransactions)
+          .then((response) => {
+            setAnalysis(response.analysis);
+            setTraceId(response.traceId);
+            setPromptVersion(response.promptVersion);
+          })
+          .catch((error: Error) => {
+            console.error("Failed to analyze spending:", error);
+            setAnalysisError("We couldn't generate insights yet. Try again soon.");
+          })
+          .finally(() => {
+            setAnalysisLoading(false);
+          });
+      } else {
+        // No transactions left, clear analysis
+        setAnalysis(null);
+        setAnalysisLoading(false);
+        setAnalysisError(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete transaction:", error);
+      showError(error, "general");
+    } finally {
+      setIsSavingTransaction(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
@@ -189,13 +307,6 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <>
-              <AnalysisPanel
-                analysis={analysis}
-                isLoading={analysisLoading}
-                error={analysisError}
-                traceId={traceId}
-                promptVersion={promptVersion}
-              />
               <div className="grid gap-6 lg:gap-8 lg:grid-cols-2">
                 <CategoryBreakdown 
                   transactions={transactions} 
@@ -203,9 +314,18 @@ export default function DashboardPage() {
                 />
                 <TransactionList 
                   transactions={transactions} 
-                  currency={userProfile?.currency || "USD"} 
+                  currency={userProfile?.currency || "USD"}
+                  onEdit={handleEditTransaction}
+                  onDelete={handleDeleteClick}
                 />
               </div>
+              <AnalysisPanel
+                analysis={analysis}
+                isLoading={analysisLoading}
+                error={analysisError}
+                traceId={traceId}
+                promptVersion={promptVersion}
+              />
             </>
           )}
         </div>
@@ -224,6 +344,34 @@ export default function DashboardPage() {
           isLoading={isSavingTransaction}
         />
       </Modal>
+
+      {/* Edit Transaction Modal */}
+      <Modal
+        isOpen={!!editingTransaction}
+        onClose={() => setEditingTransaction(null)}
+        title="Edit Transaction"
+        size="md"
+      >
+        <TransactionForm
+          transaction={editingTransaction || undefined}
+          onSubmit={handleUpdateTransaction}
+          onCancel={() => setEditingTransaction(null)}
+          isLoading={isSavingTransaction}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!deletingTransaction}
+        onClose={() => setDeletingTransaction(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Transaction"
+        description={`Are you sure you want to delete "${deletingTransaction?.description}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="destructive"
+        isLoading={isSavingTransaction}
+      />
     </div>
   );
 }
