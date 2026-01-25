@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { saveUserProfile } from "@/lib/supabase/user";
 import type { UserProfile } from "@/types";
 
 const incomeRanges = [
@@ -94,7 +95,6 @@ export function OnboardingForm() {
 
     setLoading(true);
 
-    // Store user profile in localStorage (MVP approach)
     const userProfile: UserProfile = {
       incomeRange,
       goals: selectedGoals,
@@ -102,18 +102,16 @@ export function OnboardingForm() {
       onboardingComplete: true,
     };
 
-    try {
-      localStorage.setItem("userProfile", JSON.stringify(userProfile));
-      
-      // Simulate API call
-      setTimeout(() => {
-        setLoading(false);
+    // Save to Supabase
+    saveUserProfile(userProfile)
+      .then(() => {
         router.push("/dashboard");
-      }, 600);
-    } catch (err) {
-      setLoading(false);
-      setError("Failed to save your information. Please try again.");
-    }
+      })
+      .catch((err) => {
+        console.error("Failed to save user profile:", err);
+        setError("Failed to save your information. Please try again.");
+        setLoading(false);
+      });
   };
 
   return (

@@ -52,16 +52,24 @@ ${userQuestion ? `User Question: ${userQuestion}\n` : ""}`;
     );
   }
 
-  // v2 - Improved with more structure and empathy
+  // v2 - Improved with more structure and empathy, requesting JSON output
   return (
     basePrompt +
-    `\nPlease provide:
-1. A brief summary of their spending patterns (what stands out)
-2. An explanation in plain language (avoid financial jargon)
-3. One or two specific, realistic suggestions for improvement
-4. A supportive tone that reduces anxiety rather than increases it
+    `\nPlease analyze their spending and provide a JSON response with this exact structure:
+{
+  "summary": "A brief, supportive summary of their spending patterns in plain language",
+  "patterns": ["Pattern 1", "Pattern 2", ...],
+  "anomalies": ["Anomaly 1", "Anomaly 2", ...],
+  "suggestions": ["Suggestion 1", "Suggestion 2", ...]
+}
 
-Remember: Focus on understanding and small, achievable steps. Never shame or judge.`
+Guidelines:
+- Be clear, supportive, and practical
+- Use plain language (avoid financial jargon)
+- Focus on understanding and small, achievable steps
+- Never shame or judge
+- Keep suggestions realistic and actionable
+- Return ONLY valid JSON, no additional text`
   );
 }
 

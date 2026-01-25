@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
 import { AnimatedAuthForm } from "@/components/auth/AnimatedAuthForm";
@@ -37,6 +38,7 @@ const socialProof = {
 };
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
+  const router = useRouter();
   const isSignup = mode === "signup";
   const subcopy = isSignup
     ? "Get a supportive AI coach that explains spending in plain language and helps you take the next step without overwhelm."
@@ -47,21 +49,35 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const [fullName, setFullName] = React.useState("");
   const [companyName, setCompanyName] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | undefined>();
+  const [toastMessage, setToastMessage] = React.useState<string | null>(null);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(undefined);
+    setToastMessage(null);
     setLoading(true);
 
     setTimeout(() => {
       setLoading(false);
-      setError("Demo mode only. Connect auth logic to proceed.");
+      setToastMessage(
+        "Demo mode is active. We’ll take you to onboarding to get started."
+      );
+      setTimeout(() => {
+        router.push("/onboarding");
+      }, 700);
     }, 600);
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {toastMessage ? (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed right-4 top-4 z-50 w-[320px] rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground shadow-lg"
+        >
+          {toastMessage}
+        </motion.div>
+      ) : null}
 
       <header className="relative z-10">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-6">
@@ -164,7 +180,6 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                   setCompanyName={setCompanyName}
                   onSubmit={handleSubmit}
                   loading={loading}
-                  error={error}
                   secondaryText={
                     isSignup
                       ? "Already have an account?"
