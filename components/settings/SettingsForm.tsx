@@ -13,7 +13,7 @@ import {
   financialGoals,
   incomeRanges,
 } from "@/lib/data/profileOptions";
-import { saveUserProfile } from "@/lib/supabase/user";
+import { getUserProfile, saveUserProfile } from "@/lib/supabase/user";
 import { showError, showSuccess } from "@/lib/utils";
 import type { UserProfile } from "@/types";
 
@@ -21,24 +21,49 @@ const containerVariants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
     },
   },
 };
 
 const itemVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1, transition: { duration: 0.5, ease: "easeOut" } },
+  hidden: { y: 12, opacity: 0 },
+  visible: { y: 0, opacity: 1, transition: { duration: 0.4, ease: "easeOut" } },
 };
 
-export function OnboardingForm() {
+export function SettingsForm() {
   const router = useRouter();
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
   const [incomeRange, setIncomeRange] = React.useState("");
   const [currency, setCurrency] = React.useState("USD");
   const [selectedGoals, setSelectedGoals] = React.useState<string[]>([]);
   const [selectedConcerns, setSelectedConcerns] = React.useState<string[]>([]);
-  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    async function loadProfile() {
+      try {
+        const profile = await getUserProfile();
+        if (!profile) {
+          router.push("/onboarding");
+          return;
+        }
+
+        setIncomeRange(profile.incomeRange || "");
+        setCurrency(profile.currency || "USD");
+        setSelectedGoals(profile.goals || []);
+        setSelectedConcerns(profile.concerns || []);
+      } catch (error) {
+        console.error("Failed to load profile:", error);
+        showError(error, "general");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProfile();
+  }, [router]);
 
   const toggleGoal = (goalId: string) => {
     setSelectedGoals((prev) =>
@@ -67,7 +92,7 @@ export function OnboardingForm() {
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
 
     const userProfile: UserProfile = {
       incomeRange,
@@ -77,32 +102,39 @@ export function OnboardingForm() {
       onboardingComplete: true,
     };
 
-    // Save to Supabase
     saveUserProfile(userProfile)
       .then(() => {
-        showSuccess("Your profile is saved. Redirecting...");
-        router.push("/dashboard");
+        showSuccess("Your preferences have been updated.");
       })
-      .catch((err) => {
-        console.error("Failed to save user profile:", err);
-        showError(err, "general");
-        setLoading(false);
-      });
+      .catch((error) => {
+        console.error("Failed to update profile:", error);
+        showError(error, "general");
+      })
+      .finally(() => setSaving(false));
   };
+
+  if (loading) {
+    return (
+      <Card className="border-border bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Settings</CardTitle>
+          <CardDescription>Loading your preferences...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="mx-auto w-full max-w-2xl"
+      className="mx-auto w-full max-w-3xl"
     >
-      <Card className="border-border bg-card p-6 shadow-lg">
+      <Card className="border-border bg-card shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl">Let's get to know you</CardTitle>
-          <CardDescription>
-            Help us personalize your financial coaching experience
-          </CardDescription>
+          <CardTitle className="text-2xl">Profile settings</CardTitle>
+          <CardDescription>Update your financial preferences anytime.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-8">
@@ -111,7 +143,7 @@ export function OnboardingForm() {
                 htmlFor="incomeRange"
                 className="text-sm font-medium text-foreground"
               >
-                What's your annual income range?
+                Annual income range
               </label>
               <Select
                 id="incomeRange"
@@ -125,11 +157,8 @@ export function OnboardingForm() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="space-y-2">
-              <label
-                htmlFor="currency"
-                className="text-sm font-medium text-foreground"
-              >
-                What currency do you use?
+              <label htmlFor="currency" className="text-sm font-medium text-foreground">
+                Preferred currency
               </label>
               <Select
                 id="currency"
@@ -144,7 +173,7 @@ export function OnboardingForm() {
 
             <motion.div variants={itemVariants} className="space-y-3">
               <label className="text-sm font-medium text-foreground">
-                What are your financial goals? (Select all that apply)
+                Financial goals
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 {financialGoals.map((goal) => (
@@ -168,7 +197,7 @@ export function OnboardingForm() {
 
             <motion.div variants={itemVariants} className="space-y-3">
               <label className="text-sm font-medium text-foreground">
-                What are your main financial concerns? (Select all that apply)
+                Financial concerns
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 {financialConcerns.map((concern) => (
@@ -191,12 +220,8 @@ export function OnboardingForm() {
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full"
-              >
-                {loading ? "Setting up your account..." : "Continue to Dashboard"}
+              <Button type="submit" disabled={saving} className="w-full">
+                {saving ? "Saving changes..." : "Save changes"}
               </Button>
             </motion.div>
           </form>

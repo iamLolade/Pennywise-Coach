@@ -22,6 +22,7 @@ export default function DashboardLayout({
     { href: "/dashboard", label: "Dashboard" },
     { href: "/coach", label: "Coach" },
     { href: "/insights", label: "Insights" },
+    { href: "/settings", label: "Settings" },
   ];
 
   const isActive = (href: string) => pathname === href;
