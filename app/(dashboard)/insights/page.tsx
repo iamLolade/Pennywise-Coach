@@ -5,56 +5,22 @@ import { useRouter } from "next/navigation";
 
 import { InsightCard } from "@/components/insights/InsightCard";
 import { InsightsSkeleton } from "@/components/insights/InsightsSkeleton";
+import { generateInsight } from "@/lib/api/insights";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { getInsights, saveInsight, hasRecentInsights } from "@/lib/supabase/insights";
+import { getTransactions } from "@/lib/supabase/transactions";
 import { getUserProfile } from "@/lib/supabase/user";
-import type { DailyInsight, UserProfile } from "@/types";
-
-const dailyInsights: DailyInsight[] = [
-  {
-    id: "daily-1",
-    date: "Today",
-    title: "Steady progress on essentials",
-    content:
-      "Your essential spending has been consistent this week, which helps keep your budget predictable.",
-    suggestedAction:
-      "Keep essentials under the same limit and consider moving any leftover funds to savings.",
-  },
-  {
-    id: "daily-2",
-    date: "Today",
-    title: "Small wins add up",
-    content:
-      "You made a few smaller purchases instead of one large one, which can make spending feel more manageable.",
-    suggestedAction:
-      "Set a soft daily cap for discretionary spending to keep this momentum going.",
-  },
-];
-
-const weeklyInsights: DailyInsight[] = [
-  {
-    id: "weekly-1",
-    date: "This week",
-    title: "Spending rhythm is clear",
-    content:
-      "Your spending peaks mid-week and tapers on weekends. This pattern can help you plan ahead.",
-    suggestedAction:
-      "Try preparing mid-week meals or subscriptions to reduce those peak costs.",
-  },
-  {
-    id: "weekly-2",
-    date: "This week",
-    title: "Savings opportunity detected",
-    content:
-      "Two categories account for most discretionary spending this week.",
-    suggestedAction:
-      "Pick one category to trim by 10% and track the impact over the next 7 days.",
-  },
-];
+import { showError } from "@/lib/utils";
+import type { DailyInsight, Transaction, UserProfile } from "@/types";
 
 export default function InsightsPage() {
   const router = useRouter();
   const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
+  const [dailyInsights, setDailyInsights] = React.useState<DailyInsight[]>([]);
+  const [weeklyInsights, setWeeklyInsights] = React.useState<DailyInsight[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [generatingDaily, setGeneratingDaily] = React.useState(false);
+  const [generatingWeekly, setGeneratingWeekly] = React.useState(false);
 
   React.useEffect(() => {
     async function loadData() {
@@ -74,8 +40,97 @@ export default function InsightsPage() {
         }
 
         setUserProfile(profile);
+
+        // Load existing insights
+        const [daily, weekly] = await Promise.all([
+          getInsights("daily", 2),
+          getInsights("weekly", 2),
+        ]);
+
+        setDailyInsights(daily);
+        setWeeklyInsights(weekly);
+
+        // Get transactions for generating new insights if needed
+        const transactions = await getTransactions();
+
+        // Generate daily insights if none exist
+        if (daily.length === 0 && transactions.length > 0) {
+          setGeneratingDaily(true);
+          try {
+            const response = await generateInsight(profile, transactions, "daily");
+            const saved = await saveInsight(
+              "daily",
+              response.insight.title,
+              response.insight.content,
+              response.insight.suggestedAction
+            );
+            setDailyInsights([saved]);
+          } catch (error) {
+            console.error("Failed to generate daily insight:", error);
+            showError(error, "general");
+          } finally {
+            setGeneratingDaily(false);
+          }
+        }
+
+        // Generate weekly insights if none exist
+        if (weekly.length === 0 && transactions.length > 0) {
+          setGeneratingWeekly(true);
+          try {
+            const response = await generateInsight(profile, transactions, "weekly");
+            const saved = await saveInsight(
+              "weekly",
+              response.insight.title,
+              response.insight.content,
+              response.insight.suggestedAction
+            );
+            setWeeklyInsights([saved]);
+          } catch (error) {
+            console.error("Failed to generate weekly insight:", error);
+            showError(error, "general");
+          } finally {
+            setGeneratingWeekly(false);
+          }
+        }
+
+        // Generate additional insights if we have fewer than 2
+        if (daily.length < 2 && transactions.length > 0 && !generatingDaily) {
+          setGeneratingDaily(true);
+          try {
+            const response = await generateInsight(profile, transactions, "daily");
+            const saved = await saveInsight(
+              "daily",
+              response.insight.title,
+              response.insight.content,
+              response.insight.suggestedAction
+            );
+            setDailyInsights((prev) => [...prev, saved].slice(0, 2));
+          } catch (error) {
+            console.error("Failed to generate additional daily insight:", error);
+          } finally {
+            setGeneratingDaily(false);
+          }
+        }
+
+        if (weekly.length < 2 && transactions.length > 0 && !generatingWeekly) {
+          setGeneratingWeekly(true);
+          try {
+            const response = await generateInsight(profile, transactions, "weekly");
+            const saved = await saveInsight(
+              "weekly",
+              response.insight.title,
+              response.insight.content,
+              response.insight.suggestedAction
+            );
+            setWeeklyInsights((prev) => [...prev, saved].slice(0, 2));
+          } catch (error) {
+            console.error("Failed to generate additional weekly insight:", error);
+          } finally {
+            setGeneratingWeekly(false);
+          }
+        }
       } catch (error) {
-        console.error("Failed to load user data:", error);
+        console.error("Failed to load insights:", error);
       } finally {
         setLoading(false);
       }
@@ -113,17 +168,35 @@ export default function InsightsPage() {
               </p>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {dailyInsights.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                title={insight.title}
-                content={insight.content}
-                suggestedAction={insight.suggestedAction}
-                highlight={insight.date}
-              />
-            ))}
-          </div>
+          {generatingDaily && dailyInsights.length === 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="border border-border bg-card rounded-lg p-6">
+                  <div className="h-5 w-32 bg-muted rounded animate-pulse mb-4" />
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-muted rounded animate-pulse" />
+                    <div className="h-4 w-5/6 bg-muted rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : dailyInsights.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {dailyInsights.map((insight) => (
+                <InsightCard
+                  key={insight.id}
+                  title={insight.title}
+                  content={insight.content}
+                  suggestedAction={insight.suggestedAction}
+                  highlight="Today"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No insights yet. Add some transactions to get personalized insights.</p>
+            </div>
+          )}
         </section>
 
         <section className="space-y-4">
@@ -133,17 +206,35 @@ export default function InsightsPage() {
               Patterns and guidance based on your weekly trend.
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {weeklyInsights.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                title={insight.title}
-                content={insight.content}
-                suggestedAction={insight.suggestedAction}
-                highlight={insight.date}
-              />
-            ))}
-          </div>
+          {generatingWeekly && weeklyInsights.length === 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="border border-border bg-card rounded-lg p-6">
+                  <div className="h-5 w-32 bg-muted rounded animate-pulse mb-4" />
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-muted rounded animate-pulse" />
+                    <div className="h-4 w-5/6 bg-muted rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : weeklyInsights.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {weeklyInsights.map((insight) => (
+                <InsightCard
+                  key={insight.id}
+                  title={insight.title}
+                  content={insight.content}
+                  suggestedAction={insight.suggestedAction}
+                  highlight="This week"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No insights yet. Add some transactions to get personalized insights.</p>
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -82,3 +82,29 @@ ALTER TABLE coach_conversations ENABLE ROW LEVEL SECURITY;
 -- Policy for conversations
 CREATE POLICY "Allow all operations for MVP" ON coach_conversations
   FOR ALL USING (true) WITH CHECK (true);
+
+-- Insights table
+CREATE TABLE IF NOT EXISTS insights (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('daily', 'weekly')),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  suggested_action TEXT,
+  date DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT fk_user_insight FOREIGN KEY (user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE
+);
+
+-- Create indexes for insights
+CREATE INDEX IF NOT EXISTS idx_insights_user_id ON insights(user_id);
+CREATE INDEX IF NOT EXISTS idx_insights_date ON insights(date DESC);
+CREATE INDEX IF NOT EXISTS idx_insights_user_date ON insights(user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_insights_user_type_date ON insights(user_id, type, date DESC);
+
+-- Enable RLS for insights
+ALTER TABLE insights ENABLE ROW LEVEL SECURITY;
+
+-- Policy for insights
+CREATE POLICY "Allow all operations for MVP" ON insights
+  FOR ALL USING (true) WITH CHECK (true);
