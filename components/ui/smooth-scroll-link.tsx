@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 
 interface SmoothScrollLinkProps
-  extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "onDrag" | "onDragEnd" | "onDragStart"> {
   href: string;
   children: React.ReactNode;
 }
@@ -31,6 +31,23 @@ export function SmoothScrollLink({
   };
 
   if (href.startsWith("#")) {
+    // Only pass safe props to motion.a, excluding event handlers that conflict with Framer Motion
+    const safeProps: Record<string, unknown> = {};
+    const excludeProps = [
+      "onDrag",
+      "onDragEnd",
+      "onDragStart",
+      "onAnimationStart",
+      "onAnimationEnd",
+      "onAnimationIteration",
+    ];
+    
+    Object.keys(props).forEach((key) => {
+      if (!excludeProps.includes(key)) {
+        safeProps[key] = (props as Record<string, unknown>)[key];
+      }
+    });
+    
     return (
       <motion.a
         href={href}
@@ -38,7 +55,7 @@ export function SmoothScrollLink({
         className={className}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        {...props}
+        {...safeProps}
       >
         {children}
       </motion.a>
