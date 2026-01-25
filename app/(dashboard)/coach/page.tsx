@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import { CoachChat } from "@/components/coach/CoachChat";
+import { CoachSkeleton } from "@/components/coach/CoachSkeleton";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile } from "@/lib/supabase/user";
 import type { UserProfile } from "@/types";
@@ -42,13 +43,7 @@ export default function CoachPage() {
   }, [router]);
 
   if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <CoachSkeleton />;
   }
 
   if (!userProfile) {
