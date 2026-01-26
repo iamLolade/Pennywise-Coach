@@ -146,7 +146,12 @@ export default function Home() {
                 You’re still on track to save, but choosing two home-cooked meals
                 could free up $60 for your emergency fund.
               </p>
-              <Button variant="secondary">View breakdown</Button>
+              <Button 
+                variant="secondary"
+                onClick={() => setShowSampleInsight(true)}
+              >
+                View breakdown
+              </Button>
             </div>
           </Card>
         </Container>
