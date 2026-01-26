@@ -134,13 +134,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       </header>
 
       <motion.main
-        className="mx-auto w-full max-w-6xl px-4 pb-16"
+        className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl items-center px-4 py-8 sm:py-12"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-          <motion.section className="space-y-5" variants={itemVariants}>
+        <div className="grid w-full gap-8 sm:gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+          <motion.section className="space-y-5 lg:space-y-6" variants={itemVariants}>
             <div>
               <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
                 {isSignup ? "Create calm financial clarity with " : "Welcome back to "}
