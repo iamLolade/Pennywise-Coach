@@ -9,11 +9,57 @@ import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 import { getAnalysisPrompt } from "./prompts";
 
 const HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models";
-const MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"; // Free, good for structured output
+const HF_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"; // Public, stable instruct model
 
 interface HuggingFaceResponse {
   generated_text?: string;
   error?: string;
+}
+
+function getHuggingFaceApiKey(): string {
+  const apiKey = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "HUGGINGFACE_API_KEY is not set in environment variables"
+    );
+  }
+  return apiKey;
+}
+
+function formatCoachPrompt(prompt: string): string {
+  return `You are a calm and responsible financial coach.\nUser: ${prompt}\nAssistant:`;
+}
+
+function extractGeneratedText(
+  payload: HuggingFaceResponse | HuggingFaceResponse[] | string
+): string {
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+  const result = Array.isArray(payload) ? payload[0] : payload;
+  if (result?.error) {
+    throw new Error(`Hugging Face API error: ${result.error}`);
+  }
+  return (result?.generated_text || "").trim();
+}
+
+async function logHuggingFaceError(
+  response: Response,
+  modelId: string
+): Promise<void> {
+  let bodyText = "";
+  try {
+    bodyText = await response.text();
+  } catch (error) {
+    console.warn("Failed to read Hugging Face error body:", error);
+  }
+
+  console.error("Hugging Face API error", {
+    status: response.status,
+    statusText: response.statusText,
+    modelId,
+    body: bodyText || "No response body",
+  });
 }
 
 /**
@@ -24,14 +70,10 @@ export async function analyzeWithHuggingFace(
   transactions: Transaction[],
   prompt: string
 ): Promise<SpendingAnalysis> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
+  const apiKey = getHuggingFaceApiKey();
 
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
+    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -40,7 +82,7 @@ export async function analyzeWithHuggingFace(
       body: JSON.stringify({
         inputs: prompt,
         parameters: {
-          max_new_tokens: 1000,
+          max_new_tokens: 300,
           temperature: 0.7,
           return_full_text: false,
         },
@@ -48,22 +90,15 @@ export async function analyzeWithHuggingFace(
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      await logHuggingFaceError(response, HF_MODEL_ID);
       throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
+        `Hugging Face API error: ${response.status} - ${response.statusText}`
       );
     }
 
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
+    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
+      await response.json();
+    const generatedText = extractGeneratedText(data);
 
     // Parse the LLM response into SpendingAnalysis format
     return parseLLMResponse(generatedText, transactions);
@@ -88,46 +123,35 @@ export interface CoachResponseData {
  * Returns structured response if available, otherwise plain text
  */
 export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
+  const apiKey = getHuggingFaceApiKey();
 
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
+    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        inputs: prompt,
+        inputs: formatCoachPrompt(prompt),
         parameters: {
-          max_new_tokens: 500,
-          temperature: 0.7, // Slightly lower for more consistent structured output
+          max_new_tokens: 300,
+          temperature: 0.7,
           return_full_text: false,
         },
       }),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      await logHuggingFaceError(response, HF_MODEL_ID);
       throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
+        `Hugging Face API error: ${response.status} - ${response.statusText}`
       );
     }
 
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
+    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
+      await response.json();
+    const generatedText = extractGeneratedText(data);
 
     // Try to parse as JSON (for structured responses)
     try {
@@ -291,14 +315,10 @@ export function generateFallbackAnalysis(
  * Call Hugging Face API for daily/weekly insights generation
  */
 export async function generateInsight(prompt: string): Promise<string> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
+  const apiKey = getHuggingFaceApiKey();
 
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
+    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -315,25 +335,17 @@ export async function generateInsight(prompt: string): Promise<string> {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      await logHuggingFaceError(response, HF_MODEL_ID);
       throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
+        `Hugging Face API error: ${response.status} - ${response.statusText}`
       );
     }
 
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
+    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
+      await response.json();
+    const generatedText = extractGeneratedText(data);
 
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
-
-    // Clean up the response
-    return generatedText.trim();
+    return generatedText;
   } catch (error) {
     console.error("Hugging Face API error:", error);
     throw error;
