@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
+import { CheckCircle2, Circle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,32 @@ export function AnimatedAuthForm({
   const isSignup = type === "signup";
   const submitLabel = isSignup ? "Create Account" : "Sign In";
   const loadingLabel = isSignup ? "Creating account..." : "Signing in...";
+  const passwordRequirements = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "One number", met: /\d/.test(password) },
+    { label: "One uppercase letter", met: /[A-Z]/.test(password) },
+    { label: "One lowercase letter", met: /[a-z]/.test(password) },
+    { label: "One special character", met: /[^A-Za-z0-9]/.test(password) },
+  ];
+  const showPasswordChecks = isSignup && password.length > 0;
+  const metCount = passwordRequirements.filter((requirement) => requirement.met).length;
+  const strengthRatio = metCount / passwordRequirements.length;
+  const strengthLabel =
+    strengthRatio === 1
+      ? "Strong"
+      : strengthRatio >= 0.6
+      ? "Good"
+      : strengthRatio >= 0.4
+      ? "Fair"
+      : "Weak";
+  const strengthColor =
+    strengthRatio === 1
+      ? "bg-success"
+      : strengthRatio >= 0.6
+      ? "bg-primary"
+      : strengthRatio >= 0.4
+      ? "bg-amber-400"
+      : "bg-destructive";
 
   return (
     <motion.form
@@ -136,6 +163,44 @@ export function AnimatedAuthForm({
             required
           />
         </motion.div>
+        {showPasswordChecks && (
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>
+              Characters:{" "}
+              <span className="font-medium text-foreground">{password.length}</span>
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span>Password strength</span>
+                <span className="font-medium text-foreground">{strengthLabel}</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${strengthColor}`}
+                  style={{ width: `${Math.max(10, strengthRatio * 100)}%` }}
+                />
+              </div>
+            </div>
+            <ul className="space-y-1">
+              {passwordRequirements.map((requirement) => (
+                <li key={requirement.label} className="flex items-center gap-2">
+                  {requirement.met ? (
+                    <CheckCircle2 className="h-4 w-4 text-success" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span
+                    className={
+                      requirement.met ? "text-foreground" : "text-muted-foreground"
+                    }
+                  >
+                    {requirement.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {error ? (

@@ -34,11 +34,6 @@ const features = [
   "Professional, mobile-friendly guidance",
 ];
 
-const socialProof = {
-  rating: "4.9/5 rating",
-  quote: "This made budgeting feel human and calm.",
-  attribution: "Alex Rivera, Product Designer",
-};
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const router = useRouter();
@@ -134,13 +129,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       </header>
 
       <motion.main
-        className="mx-auto w-full max-w-6xl px-4 pb-16"
+        className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl items-start px-4 py-8 sm:py-12 lg:py-16"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-          <motion.section className="space-y-5" variants={itemVariants}>
+        <div className="grid w-full gap-8 sm:gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+          <motion.section className="space-y-5 lg:space-y-6" variants={itemVariants}>
             <div>
               <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
                 {isSignup ? "Create calm financial clarity with " : "Welcome back to "}
@@ -151,23 +146,25 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               {subcopy}
             </p>
             {isSignup && (
-              <div className="grid gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Why choose us?
-                </h2>
-                <div className="space-y-3">
-                  {features.map((feature) => (
-                    <motion.div
-                      key={feature}
-                      variants={itemVariants}
-                      whileHover={{ scale: 1.02, x: 6 }}
-                      className="rounded-xl border border-border/60 bg-card/60 px-4 py-3 text-sm text-muted-foreground shadow-sm"
-                    >
-                      {feature}
-                    </motion.div>
-                  ))}
+              <>
+                <div className="grid gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Why choose us?
+                  </h2>
+                  <div className="space-y-3">
+                    {features.map((feature) => (
+                      <motion.div
+                        key={feature}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.02, x: 6 }}
+                        className="rounded-xl border border-border/60 bg-card/60 px-4 py-3 text-sm text-muted-foreground shadow-sm"
+                      >
+                        {feature}
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
             {!isSignup && (
               <motion.div
@@ -223,32 +220,6 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             </Card>
           </motion.section>
         </div>
-
-        {isSignup && (
-          <motion.section
-            variants={itemVariants}
-            className="mt-10 rounded-2xl border border-border/60 bg-card/70 p-6 text-sm text-muted-foreground"
-          >
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex -space-x-2">
-                {[...Array(5)].map((_, index) => (
-                  <span
-                    key={`avatar-${index}`}
-                    className="h-8 w-8 rounded-full border border-border bg-primary/10"
-                  />
-                ))}
-              </div>
-              <div>
-                <p className="font-medium text-foreground">
-                  {socialProof.rating}
-                </p>
-                <p>
-                  "{socialProof.quote}" - {socialProof.attribution}
-                </p>
-              </div>
-            </div>
-          </motion.section>
-        )}
       </motion.main>
     </div>
   );

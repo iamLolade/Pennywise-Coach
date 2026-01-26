@@ -1,9 +1,14 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Container, Section } from "@/components/ui/section";
 import { Header } from "@/components/landing/Header";
+import { Modal } from "@/components/ui/modal";
+import { SmoothScrollLink } from "@/components/ui/smooth-scroll-link";
 
 const features = [
   {
@@ -51,24 +56,6 @@ const steps = [
   },
 ];
 
-const testimonials = [
-  {
-    quote: "It feels like a calm coach, not a judgmental app.",
-    name: "Jordan Lee",
-    role: "Product Manager",
-  },
-  {
-    quote: "I finally understand where my money goes and why.",
-    name: "Avery Chen",
-    role: "Designer",
-  },
-  {
-    quote: "Clear, practical guidance without the overwhelm.",
-    name: "Sam Rivera",
-    role: "Freelancer",
-  },
-];
-
 const faqs = [
   {
     question: "Is this financial advice?",
@@ -87,28 +74,6 @@ const faqs = [
   },
 ];
 
-const plans = [
-  {
-    name: "Starter",
-    price: "$0",
-    period: "/mo",
-    features: ["Weekly insights", "Basic coaching"],
-  },
-  {
-    name: "Growth",
-    price: "$12",
-    period: "/mo",
-    features: ["Daily insights", "Goal tracking", "Priority support"],
-    highlight: true,
-  },
-  {
-    name: "Team",
-    price: "Custom",
-    period: "",
-    features: ["Financial coaching for teams", "Custom reporting"],
-  },
-];
-
 const stats = [
   { label: "Avg. insight time", value: "2 min" },
   { label: "Clarity score", value: "4.7/5" },
@@ -116,11 +81,68 @@ const stats = [
 ];
 
 export default function Home() {
+  const [showSampleInsight, setShowSampleInsight] = React.useState(false);
+
+  const sampleInsights = [
+    {
+      title: "Dining is trending 18% higher this week",
+      content:
+        "You're still on track to save, but choosing two home-cooked meals could free up $60 for your emergency fund.",
+      patterns: [
+        "Your dining spending has increased this week compared to your average",
+        "You're maintaining a positive savings rate overall",
+        "Small adjustments in dining could accelerate your emergency fund goal",
+      ],
+      suggestions: [
+        "Consider meal planning for 2-3 days this week to reduce dining out",
+        "Set a weekly dining budget that aligns with your emergency fund goal",
+        "Track your dining expenses for the next week to see the impact of small changes",
+      ],
+    },
+    {
+      title: "Subscriptions are adding up quietly",
+      content:
+        "You're spending about $78/month on subscriptions. Trimming one or two could free up funds for your goal.",
+      patterns: [
+        "Multiple small subscriptions are stacking into a larger total",
+        "Your fixed monthly costs are trending slightly higher",
+        "You're still making progress toward your savings target",
+      ],
+      suggestions: [
+        "Review your subscriptions and pause the lowest‑value one",
+        "Set a monthly cap for subscription spending",
+        "Check for annual plans that cost less overall",
+      ],
+    },
+    {
+      title: "Groceries look steady — great job",
+      content:
+        "Your grocery spending is consistent week to week. That stability helps your overall budget stay on track.",
+      patterns: [
+        "Groceries are within your typical range",
+        "Essential spending is stable and predictable",
+        "You have room to focus on one smaller category next",
+      ],
+      suggestions: [
+        "Pick one flexible category to optimize this week",
+        "Set a small weekly savings target to build momentum",
+        "Keep a short list before shopping to avoid impulse adds",
+      ],
+    },
+  ];
+  const [sampleInsightIndex, setSampleInsightIndex] = React.useState(0);
+  const sampleInsight = sampleInsights[sampleInsightIndex];
+
+  const openSampleInsight = () => {
+    setSampleInsightIndex((prev) => (prev + 1) % sampleInsights.length);
+    setShowSampleInsight(true);
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header />
 
-      <Section id="hero" className="pt-16">
+      <Section id="hero" className="pt-16 scroll-mt-20">
         <Container className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
             <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
@@ -141,12 +163,12 @@ export default function Home() {
               >
                 Get started free
               </Link>
-              <Link
+              <SmoothScrollLink
                 href="#how-it-works"
                 className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background px-5 text-sm font-medium text-foreground transition hover:border-primary/40 sm:w-auto"
               >
                 See how it works
-              </Link>
+              </SmoothScrollLink>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
               <span>No credit card</span>
@@ -164,7 +186,12 @@ export default function Home() {
                 You’re still on track to save, but choosing two home-cooked meals
                 could free up $60 for your emergency fund.
               </p>
-              <Button variant="secondary">View breakdown</Button>
+              <Button
+                variant="secondary"
+                onClick={openSampleInsight}
+              >
+                View breakdown
+              </Button>
             </div>
           </Card>
         </Container>
@@ -183,7 +210,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section id="features">
+      <Section id="features" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -210,7 +237,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section id="how-it-works">
+      <Section id="how-it-works" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -239,80 +266,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section>
-        <Container>
-          <div className="mb-10 max-w-2xl space-y-3">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              Social proof
-            </span>
-            <h2 className="text-3xl font-semibold">
-              Loved by thoughtful spenders
-            </h2>
-          </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {testimonials.map((testimonial) => (
-              <Card
-                key={testimonial.name}
-                className="border-border bg-card p-6"
-              >
-                <p className="text-sm text-muted-foreground">
-                  “{testimonial.quote}”
-                </p>
-                <div className="mt-4 text-sm font-medium">
-                  {testimonial.name}
-                  <span className="block text-xs text-muted-foreground">
-                    {testimonial.role}
-                  </span>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
-      <Section id="pricing">
-        <Container>
-          <div className="mb-10 max-w-2xl space-y-3">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              Pricing
-            </span>
-            <h2 className="text-3xl font-semibold">Choose your plan</h2>
-            <p className="text-muted-foreground">
-              Start free and upgrade when you are ready.
-          </p>
-        </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`border-border p-6 ${
-                  plan.highlight
-                    ? "border-primary bg-card shadow-lg"
-                    : "bg-card"
-                }`}
-              >
-                <h3 className="text-lg font-semibold">{plan.name}</h3>
-                <p className="mt-2 text-3xl font-semibold">
-                  {plan.price}
-                  <span className="text-base text-muted-foreground">
-                    {plan.period}
-                  </span>
-                </p>
-                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  {plan.features.map((feature) => (
-                    <li key={feature}>• {feature}</li>
-                  ))}
-                </ul>
-                <Button className="mt-6 w-full">
-                  {plan.name === "Team" ? "Talk to sales" : "Get started"}
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
-      <Section id="faq">
+      <Section id="faq" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -350,16 +304,84 @@ export default function Home() {
               >
                 Get started free
               </Link>
-              <Link
-                href="/dashboard"
-                className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background px-5 text-sm font-medium text-foreground transition hover:border-primary/40 sm:w-auto"
+              <Button
+                onClick={openSampleInsight}
+                variant="secondary"
+                className="h-11 w-full sm:w-auto"
               >
                 See a sample insight
-              </Link>
+              </Button>
             </div>
           </Card>
         </Container>
       </Section>
+
+      {/* Sample Insight Modal */}
+      <Modal
+        isOpen={showSampleInsight}
+        onClose={() => setShowSampleInsight(false)}
+        title="Sample Financial Insight"
+        size="lg"
+      >
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-foreground">
+              {sampleInsight.title}
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {sampleInsight.content}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+              What We Noticed
+            </h4>
+            <ul className="space-y-2.5 text-sm text-muted-foreground">
+              {sampleInsight.patterns.map((pattern, index) => (
+                <li key={index} className="flex gap-2.5">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span className="leading-relaxed">{pattern}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+              Ways to Improve
+            </h4>
+            <ul className="space-y-2.5 text-sm text-muted-foreground">
+              {sampleInsight.suggestions.map((suggestion, index) => (
+                <li key={index} className="flex gap-2.5">
+                  <span className="text-success mt-0.5">•</span>
+                  <span className="leading-relaxed">{suggestion}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-4">
+              This is a sample insight. When you sign up, you'll get personalized insights based on your actual spending patterns and financial goals.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={() => setShowSampleInsight(false)}
+                variant="secondary"
+                className="flex-1"
+              >
+                Close
+              </Button>
+              <Link href="/signup" className="flex-1">
+                <Button className="w-full">
+                  Get started free
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       <footer className="border-t border-border bg-background">
         <Container className="flex flex-col gap-6 py-10 md:flex-row md:items-center md:justify-between">
@@ -372,9 +394,6 @@ export default function Home() {
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground">
               Features
-            </a>
-            <a href="#pricing" className="hover:text-foreground">
-              Pricing
             </a>
             <a href="#faq" className="hover:text-foreground">
               FAQ
