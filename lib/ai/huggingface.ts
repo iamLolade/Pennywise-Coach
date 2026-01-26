@@ -7,13 +7,150 @@
 
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 import { getAnalysisPrompt } from "./prompts";
+import { InferenceClient } from "@huggingface/inference";
 
-const HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models";
-const MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"; // Free, good for structured output
+// Use a model that works reliably with HF router (per HF docs example)
+const HF_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct";
 
-interface HuggingFaceResponse {
-  generated_text?: string;
-  error?: string;
+function getHuggingFaceApiKey(): string {
+  const apiKey = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "HUGGINGFACE_API_KEY is not set in environment variables"
+    );
+  }
+  return apiKey;
+}
+
+function getHuggingFaceClient(): InferenceClient {
+  return new InferenceClient(getHuggingFaceApiKey());
+}
+
+/**
+ * Create a promise that rejects after a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
+/**
+ * Retry a function with exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on certain errors (auth, validation)
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (
+          errorMsg.includes("authentication") ||
+          errorMsg.includes("unauthorized") ||
+          errorMsg.includes("invalid") ||
+          errorMsg.includes("not found")
+        ) {
+          throw error;
+        }
+      }
+
+      // If this was the last attempt, throw
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s...
+      const delayMs = baseDelayMs * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Get a user-friendly error message from HF API errors
+ */
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+
+    if (msg.includes("timeout")) {
+      return "The AI service is taking too long to respond. Please try again.";
+    }
+    if (msg.includes("authentication") || msg.includes("unauthorized")) {
+      return "Authentication failed. Please check your API key.";
+    }
+    if (msg.includes("not found") || msg.includes("404")) {
+      return "The AI model is temporarily unavailable. Please try again later.";
+    }
+    if (msg.includes("provider") || msg.includes("400")) {
+      return "The AI service is experiencing issues. Please try again in a moment.";
+    }
+    if (msg.includes("rate limit") || msg.includes("429")) {
+      return "Too many requests. Please wait a moment and try again.";
+    }
+
+    return "The AI service encountered an error. Please try again.";
+  }
+
+  return "An unexpected error occurred. Please try again.";
+}
+
+async function runChatCompletion(
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  parameters: { max_new_tokens: number; temperature: number }
+): Promise<string> {
+  const client = getHuggingFaceClient();
+  const timeoutMs = 30000; // 30 seconds timeout
+
+  try {
+    const result = await withRetry(
+      () =>
+        withTimeout(
+          client.chatCompletion({
+            model: HF_MODEL_ID,
+            messages,
+            max_tokens: parameters.max_new_tokens,
+            temperature: parameters.temperature,
+          }),
+          timeoutMs
+        ),
+      2, // Max 2 retries (3 total attempts)
+      1000 // Base delay 1s
+    );
+
+    const content = result.choices?.[0]?.message?.content;
+    if (!content || content.trim().length === 0) {
+      throw new Error("Received empty response from AI model");
+    }
+
+    return content.trim();
+  } catch (error: any) {
+    const friendlyMessage = getErrorMessage(error);
+    console.error("Hugging Face SDK error:", {
+      model: HF_MODEL_ID,
+      message: error?.message,
+      friendlyMessage,
+      error,
+    });
+
+    // Throw with friendly message for better UX
+    throw new Error(friendlyMessage);
+  }
 }
 
 /**
@@ -24,46 +161,20 @@ export async function analyzeWithHuggingFace(
   transactions: Transaction[],
   prompt: string
 ): Promise<SpendingAnalysis> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
-
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 1000,
-          temperature: 0.7,
-          return_full_text: false,
+    const generatedText = await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a helpful financial analysis assistant. Respond with the JSON format requested in the prompt.",
         },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
-      );
-    }
-
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.7,
+      }
+    );
 
     // Parse the LLM response into SpendingAnalysis format
     return parseLLMResponse(generatedText, transactions);
@@ -74,51 +185,62 @@ export async function analyzeWithHuggingFace(
 }
 
 /**
- * Call Hugging Face API for coach chat responses
+ * Structured coach response from AI
  */
-export async function getCoachResponse(prompt: string): Promise<string> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
+export interface CoachResponseData {
+  response: string;
+  tone?: string;
+  keyPoints?: string[];
+  suggestedAction?: string;
+}
 
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
-
+/**
+ * Call Hugging Face API for coach chat responses
+ * Returns structured response if available, otherwise plain text
+ */
+export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 500,
-          temperature: 0.8,
-          return_full_text: false,
+    const generatedText = await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a calm and responsible financial coach.",
         },
-      }),
-    });
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.7,
+      }
+    );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
-      );
+    // Try to parse as JSON (for structured responses)
+    try {
+      // Remove markdown code blocks if present
+      let cleanedText = generatedText.trim();
+      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      cleanedText = cleanedText.trim();
+
+      // Try to extract JSON object
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate structure
+        if (parsed.response && typeof parsed.response === "string") {
+          return {
+            response: parsed.response,
+            tone: parsed.tone,
+            keyPoints: parsed.keyPoints,
+            suggestedAction: parsed.suggestedAction,
+          } as CoachResponseData;
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, return plain text
+      console.warn("Failed to parse coach response as JSON, using plain text:", parseError);
     }
 
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
-
-    // Clean up the response - remove any markdown or extra formatting
+    // Fallback to plain text
     return generatedText.trim();
   } catch (error) {
     console.error("Hugging Face API error:", error);
@@ -130,7 +252,7 @@ export async function getCoachResponse(prompt: string): Promise<string> {
  * Parse LLM response into SpendingAnalysis format
  * 
  * The LLM should return a JSON object with the analysis.
- * We'll try to extract it from the response text.
+ * We'll try multiple extraction methods to be more robust.
  */
 function parseLLMResponse(
   responseText: string,
@@ -139,12 +261,43 @@ function parseLLMResponse(
   // Clean the response text - remove markdown code blocks if present
   let cleanedText = responseText.trim();
 
-  // Remove markdown code blocks
-  cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-  cleanedText = cleanedText.trim();
+  // Remove markdown code blocks (multiple patterns)
+  cleanedText = cleanedText
+    .replace(/```json\n?/gi, "")
+    .replace(/```\n?/g, "")
+    .replace(/^json\s*/i, "")
+    .trim();
 
-  // Try to extract JSON from the response
-  let jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+  // Try multiple JSON extraction methods
+  let jsonMatch: RegExpMatchArray | null = null;
+
+  // Method 1: Look for JSON object at the start
+  jsonMatch = cleanedText.match(/^\s*\{[\s\S]*\}\s*$/);
+
+  // Method 2: Extract first JSON object found
+  if (!jsonMatch) {
+    jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+  }
+
+  // Method 3: Look for JSON after common prefixes
+  if (!jsonMatch) {
+    const afterColon = cleanedText.split(/[:]\s*/).slice(1).join(":").trim();
+    jsonMatch = afterColon.match(/\{[\s\S]*\}/);
+  }
+
+  if (!jsonMatch) {
+    console.warn("Could not find JSON in LLM response, attempting to parse entire response");
+    // Last resort: try parsing the entire cleaned text
+    try {
+      const parsed = JSON.parse(cleanedText);
+      if (typeof parsed === "object" && parsed !== null) {
+        jsonMatch = [JSON.stringify(parsed)];
+      }
+    } catch {
+      // Will throw below
+    }
+  }
+
   if (!jsonMatch) {
     throw new Error("Could not find JSON in LLM response");
   }
@@ -168,6 +321,7 @@ function parseLLMResponse(
   } catch (error) {
     console.error("Failed to parse LLM response:", error);
     console.error("Response text:", responseText);
+    console.error("Extracted JSON:", jsonMatch[0]);
     throw new Error("Failed to parse LLM response as valid JSON");
   }
 }
@@ -251,54 +405,70 @@ export function generateFallbackAnalysis(
 }
 
 /**
- * Call Hugging Face API for daily/weekly insights generation
+ * Structured insight response from AI
  */
-export async function generateInsight(prompt: string): Promise<string> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
+export interface InsightResponseData {
+  title: string;
+  content: string;
+  suggestedAction: string;
+}
 
-  if (!apiKey) {
-    throw new Error("HUGGINGFACE_API_KEY is not set in environment variables");
-  }
-
+/**
+ * Call Hugging Face API for daily/weekly insights generation
+ * Returns structured response if available, otherwise plain text
+ */
+export async function generateInsight(prompt: string): Promise<InsightResponseData | string> {
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${MODEL_NAME}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 300,
-          temperature: 0.8,
-          return_full_text: false,
+    const generatedText = await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a supportive financial coach. Provide concise, actionable insights in the JSON format requested.",
         },
-      }),
-    });
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.8,
+      }
+    );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${errorData.error || response.statusText}`
-      );
+    // Try to parse as JSON (for structured responses)
+    try {
+      // Remove markdown code blocks if present
+      let cleanedText = generatedText.trim();
+      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      cleanedText = cleanedText.trim();
+
+      // Try to extract JSON object
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate structure
+        if (
+          parsed.title &&
+          parsed.content &&
+          parsed.suggestedAction &&
+          typeof parsed.title === "string" &&
+          typeof parsed.content === "string" &&
+          typeof parsed.suggestedAction === "string"
+        ) {
+          return {
+            title: parsed.title,
+            content: parsed.content,
+            suggestedAction: parsed.suggestedAction,
+          } as InsightResponseData;
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, return plain text
+      console.warn("Failed to parse insight response as JSON, using plain text:", parseError);
     }
 
-    const data: HuggingFaceResponse | HuggingFaceResponse[] = await response.json();
-
-    // Handle array response (some models return arrays)
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result.error) {
-      throw new Error(`Hugging Face API error: ${result.error}`);
-    }
-
-    const generatedText = result.generated_text || "";
-
-    // Clean up the response
+    // Fallback to plain text
     return generatedText.trim();
   } catch (error) {
-    console.error("Hugging Face API error:", error);
+    // Error already logged in runChatCompletion
     throw error;
   }
 }

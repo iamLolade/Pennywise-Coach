@@ -18,7 +18,8 @@ export async function sendCoachMessage(
   userProfile: UserProfile,
   conversationHistory: CoachMessage[],
   currentQuestion: string,
-  promptVersion: PromptVersion = PROMPT_VERSIONS.v2
+  promptVersion: PromptVersion = PROMPT_VERSIONS.v3,
+  includeTransactions: boolean = true
 ): Promise<CoachResponse> {
   const response = await fetch("/api/ai/coach", {
     method: "POST",
@@ -30,6 +31,7 @@ export async function sendCoachMessage(
       conversationHistory,
       currentQuestion,
       promptVersion,
+      includeTransactions,
     }),
   });
 

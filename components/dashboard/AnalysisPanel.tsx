@@ -182,14 +182,14 @@ export function AnalysisPanel({
       </CardContent>
       {(traceId || promptVersion) && (
         <CardFooter className="pt-4 border-t border-border">
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
             {traceId && (
-              <span>
+              <span className="break-all">
                 Trace: <code className="text-xs font-mono">{traceId.slice(0, 8)}...</code>
               </span>
             )}
             {promptVersion && (
-              <span>
+              <span className="break-all">
                 Prompt: <code className="text-xs font-mono">{promptVersion}</code>
               </span>
             )}

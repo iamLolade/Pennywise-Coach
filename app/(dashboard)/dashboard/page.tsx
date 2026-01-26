@@ -258,21 +258,24 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-        <div className="mb-8 lg:mb-12 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-semibold text-foreground mb-2">
-              Dashboard
-            </h1>
-            <p className="text-sm lg:text-base text-muted-foreground">
-              Overview of your financial activity and insights
-            </p>
+        <div className="mb-8 lg:mb-12">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-foreground mb-2">
+                Dashboard
+              </h1>
+              <p className="text-sm lg:text-base text-muted-foreground">
+                Overview of your financial activity and insights
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowAddTransactionModal(true)}
+              className="flex-shrink-0"
+            >
+              <span className="hidden sm:inline">Add Transaction</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
           </div>
-          <Button
-            onClick={() => setShowAddTransactionModal(true)}
-            className="hidden sm:inline-flex"
-          >
-            Add Transaction
-          </Button>
         </div>
 
         <div className="space-y-6 lg:space-y-8">
