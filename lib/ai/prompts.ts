@@ -56,21 +56,21 @@ ${userQuestion ? `User Question: ${userQuestion}\n` : ""}`;
   // v2 - Improved with more structure and empathy, requesting JSON output
   return (
     basePrompt +
-    `\nPlease analyze their spending and provide a JSON response with this exact structure:
+    `\nAnalyze their spending and respond with ONLY a valid JSON object. Do not include any text before or after the JSON. Use this exact structure:
+
 {
   "summary": "A brief, supportive summary of their spending patterns in plain language",
-  "patterns": ["Pattern 1", "Pattern 2", ...],
-  "anomalies": ["Anomaly 1", "Anomaly 2", ...],
-  "suggestions": ["Suggestion 1", "Suggestion 2", ...]
+  "patterns": ["Pattern 1", "Pattern 2"],
+  "anomalies": ["Anomaly 1", "Anomaly 2"],
+  "suggestions": ["Suggestion 1", "Suggestion 2"]
 }
 
-Guidelines:
-- Be clear, supportive, and practical
+IMPORTANT: 
+- Return ONLY the JSON object, no markdown, no code blocks, no explanation
 - Use plain language (avoid financial jargon)
-- Focus on understanding and small, achievable steps
-- Never shame or judge
+- Be supportive and non-judgmental
 - Keep suggestions realistic and actionable
-- Return ONLY valid JSON, no additional text`
+- Ensure all arrays have at least 2 items`
   );
 }
 

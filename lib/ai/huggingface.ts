@@ -252,7 +252,7 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
  * Parse LLM response into SpendingAnalysis format
  * 
  * The LLM should return a JSON object with the analysis.
- * We'll try to extract it from the response text.
+ * We'll try multiple extraction methods to be more robust.
  */
 function parseLLMResponse(
   responseText: string,
@@ -261,12 +261,43 @@ function parseLLMResponse(
   // Clean the response text - remove markdown code blocks if present
   let cleanedText = responseText.trim();
 
-  // Remove markdown code blocks
-  cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-  cleanedText = cleanedText.trim();
+  // Remove markdown code blocks (multiple patterns)
+  cleanedText = cleanedText
+    .replace(/```json\n?/gi, "")
+    .replace(/```\n?/g, "")
+    .replace(/^json\s*/i, "")
+    .trim();
 
-  // Try to extract JSON from the response
-  let jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+  // Try multiple JSON extraction methods
+  let jsonMatch: RegExpMatchArray | null = null;
+
+  // Method 1: Look for JSON object at the start
+  jsonMatch = cleanedText.match(/^\s*\{[\s\S]*\}\s*$/);
+
+  // Method 2: Extract first JSON object found
+  if (!jsonMatch) {
+    jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+  }
+
+  // Method 3: Look for JSON after common prefixes
+  if (!jsonMatch) {
+    const afterColon = cleanedText.split(/[:]\s*/).slice(1).join(":").trim();
+    jsonMatch = afterColon.match(/\{[\s\S]*\}/);
+  }
+
+  if (!jsonMatch) {
+    console.warn("Could not find JSON in LLM response, attempting to parse entire response");
+    // Last resort: try parsing the entire cleaned text
+    try {
+      const parsed = JSON.parse(cleanedText);
+      if (typeof parsed === "object" && parsed !== null) {
+        jsonMatch = [JSON.stringify(parsed)];
+      }
+    } catch {
+      // Will throw below
+    }
+  }
+
   if (!jsonMatch) {
     throw new Error("Could not find JSON in LLM response");
   }
@@ -290,6 +321,7 @@ function parseLLMResponse(
   } catch (error) {
     console.error("Failed to parse LLM response:", error);
     console.error("Response text:", responseText);
+    console.error("Extracted JSON:", jsonMatch[0]);
     throw new Error("Failed to parse LLM response as valid JSON");
   }
 }
