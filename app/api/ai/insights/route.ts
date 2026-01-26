@@ -104,19 +104,18 @@ export async function POST(request: NextRequest) {
         evaluationScore = evaluation.average;
 
         // Log evaluation to Opik
+        // Map insight scores to OpikEvaluation format (relevance -> helpfulness, actionability -> financialAlignment)
         await logEvaluation({
           traceId,
-          experimentName: "insights-generation",
-          promptVersion,
-          evaluation: {
+          scores: {
             clarity: evaluation.clarity,
-            relevance: evaluation.relevance,
+            helpfulness: evaluation.relevance, // Map relevance to helpfulness for consistency
             tone: evaluation.tone,
-            actionability: evaluation.actionability,
+            financialAlignment: evaluation.actionability, // Map actionability to financialAlignment for consistency
             safetyFlags: evaluation.safetyFlags,
             average: evaluation.average,
-            reasoning: evaluation.reasoning,
           },
+          reasoning: evaluation.reasoning,
         });
       } catch (evalError) {
         console.warn("Failed to evaluate insight:", evalError);
