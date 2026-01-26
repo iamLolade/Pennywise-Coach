@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Container, Section } from "@/components/ui/section";
 import { Header } from "@/components/landing/Header";
 import { Modal } from "@/components/ui/modal";
+import { SmoothScrollLink } from "@/components/ui/smooth-scroll-link";
 
 const features = [
   {
@@ -122,12 +123,12 @@ export default function Home() {
               >
                 Get started free
               </Link>
-              <Link
+              <SmoothScrollLink
                 href="#how-it-works"
                 className="inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-background px-5 text-sm font-medium text-foreground transition hover:border-primary/40 sm:w-auto"
               >
                 See how it works
-              </Link>
+              </SmoothScrollLink>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
               <span>No credit card</span>
