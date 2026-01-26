@@ -11,7 +11,7 @@ import {
   currencies,
   financialConcerns,
   financialGoals,
-  incomeRanges,
+  getIncomeRanges,
 } from "@/lib/data/profileOptions";
 import { saveUserProfile } from "@/lib/supabase/user";
 import { showError, showSuccess } from "@/lib/utils";
@@ -39,6 +39,8 @@ export function OnboardingForm() {
   const [selectedGoals, setSelectedGoals] = React.useState<string[]>([]);
   const [selectedConcerns, setSelectedConcerns] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
+
+  const incomeOptions = React.useMemo(() => getIncomeRanges(currency), [currency]);
 
   const toggleGoal = (goalId: string) => {
     setSelectedGoals((prev) =>
@@ -108,24 +110,6 @@ export function OnboardingForm() {
           <form onSubmit={handleSubmit} className="space-y-8">
             <motion.div variants={itemVariants} className="space-y-2">
               <label
-                htmlFor="incomeRange"
-                className="text-sm font-medium text-foreground"
-              >
-                What's your annual income range?
-              </label>
-              <Select
-                id="incomeRange"
-                name="incomeRange"
-                options={incomeRanges}
-                value={incomeRange}
-                onChange={(value) => setIncomeRange(value)}
-                placeholder="Select an option"
-                required
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants} className="space-y-2">
-              <label
                 htmlFor="currency"
                 className="text-sm font-medium text-foreground"
               >
@@ -136,8 +120,29 @@ export function OnboardingForm() {
                 name="currency"
                 options={currencies}
                 value={currency}
-                onChange={(value) => setCurrency(value)}
+                onChange={(value) => {
+                  setCurrency(value);
+                  setIncomeRange("");
+                }}
                 placeholder="Select your currency"
+                required
+              />
+            </motion.div>
+
+            <motion.div variants={itemVariants} className="space-y-2">
+              <label
+                htmlFor="incomeRange"
+                className="text-sm font-medium text-foreground"
+              >
+                What's your annual income range? ({currency})
+              </label>
+              <Select
+                id="incomeRange"
+                name="incomeRange"
+                options={incomeOptions}
+                value={incomeRange}
+                onChange={(value) => setIncomeRange(value)}
+                placeholder="Select an option"
                 required
               />
             </motion.div>
