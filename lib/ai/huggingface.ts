@@ -74,9 +74,20 @@ export async function analyzeWithHuggingFace(
 }
 
 /**
- * Call Hugging Face API for coach chat responses
+ * Structured coach response from AI
  */
-export async function getCoachResponse(prompt: string): Promise<string> {
+export interface CoachResponseData {
+  response: string;
+  tone?: string;
+  keyPoints?: string[];
+  suggestedAction?: string;
+}
+
+/**
+ * Call Hugging Face API for coach chat responses
+ * Returns structured response if available, otherwise plain text
+ */
+export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
   const apiKey = process.env.HUGGINGFACE_API_KEY;
 
   if (!apiKey) {
@@ -94,7 +105,7 @@ export async function getCoachResponse(prompt: string): Promise<string> {
         inputs: prompt,
         parameters: {
           max_new_tokens: 500,
-          temperature: 0.8,
+          temperature: 0.7, // Slightly lower for more consistent structured output
           return_full_text: false,
         },
       }),
@@ -118,7 +129,33 @@ export async function getCoachResponse(prompt: string): Promise<string> {
 
     const generatedText = result.generated_text || "";
 
-    // Clean up the response - remove any markdown or extra formatting
+    // Try to parse as JSON (for structured responses)
+    try {
+      // Remove markdown code blocks if present
+      let cleanedText = generatedText.trim();
+      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      cleanedText = cleanedText.trim();
+
+      // Try to extract JSON object
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate structure
+        if (parsed.response && typeof parsed.response === "string") {
+          return {
+            response: parsed.response,
+            tone: parsed.tone,
+            keyPoints: parsed.keyPoints,
+            suggestedAction: parsed.suggestedAction,
+          } as CoachResponseData;
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, return plain text
+      console.warn("Failed to parse coach response as JSON, using plain text:", parseError);
+    }
+
+    // Fallback to plain text
     return generatedText.trim();
   } catch (error) {
     console.error("Hugging Face API error:", error);

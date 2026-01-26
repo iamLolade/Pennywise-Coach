@@ -6,6 +6,7 @@
 export const PROMPT_VERSIONS = {
   v1: "v1-baseline",
   v2: "v2-improved",
+  v3: "v3-structured-json",
 } as const;
 
 export type PromptVersion = (typeof PROMPT_VERSIONS)[keyof typeof PROMPT_VERSIONS];
@@ -37,11 +38,11 @@ User Profile:
 
 Recent Transactions:
 ${transactions
-  .map(
-    (t) =>
-      `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category} - ${t.description}`
-  )
-  .join("\n")}
+      .map(
+        (t) =>
+          `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category} - ${t.description}`
+      )
+      .join("\n")}
 
 ${userQuestion ? `User Question: ${userQuestion}\n` : ""}`;
 
@@ -101,9 +102,9 @@ Recent Activity Summary: ${summary}
 
 Recent Transactions (last 3 days):
 ${recentTransactions
-  .slice(-3)
-  .map((t) => `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category}`)
-  .join("\n")}`;
+      .slice(-3)
+      .map((t) => `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category}`)
+      .join("\n")}`;
 
   if (version === PROMPT_VERSIONS.v1) {
     return basePrompt + `\nProvide a brief, helpful insight.`;
@@ -129,25 +130,46 @@ export function getCoachPrompt(
     incomeRange: string;
     goals: string[];
     concerns: string[];
+    currency?: string;
   },
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
   currentQuestion: string,
-  contextSummary?: string
+  contextSummary?: string,
+  recentTransactions?: Array<{
+    amount: number;
+    category: string;
+    date: string;
+    description: string;
+  }>
 ): string {
-  const basePrompt = `You are a supportive financial coach in a conversation with a user.
+  const currency = userProfile.currency || "USD";
+  const currencySymbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$";
+
+  const basePrompt = `You are Penny, a supportive, empathetic financial coach. Your role is to help users understand their finances in plain language and take small, achievable steps toward their goals.
 
 User Profile:
 - Income Range: ${userProfile.incomeRange}
-- Goals: ${userProfile.goals.join(", ")}
+- Financial Goals: ${userProfile.goals.join(", ")}
 - Concerns: ${userProfile.concerns.join(", ")}
+- Currency: ${currency}
 
-${contextSummary ? `Context: ${contextSummary}\n` : ""}
+${recentTransactions && recentTransactions.length > 0 ? `Recent Spending Context (last 7 days):
+${recentTransactions
+        .slice(0, 5)
+        .map(
+          (t) =>
+            `- ${t.date}: ${currencySymbol}${Math.abs(t.amount).toFixed(2)} in ${t.category} - ${t.description}`
+        )
+        .join("\n")}
+` : ""}
 
-Recent Conversation:
+${contextSummary ? `Financial Summary: ${contextSummary}\n` : ""}
+
+Recent Conversation (last 4 messages):
 ${conversationHistory
-  .slice(-4)
-  .map((msg) => `${msg.role === "user" ? "User" : "Coach"}: ${msg.content}`)
-  .join("\n")}
+      .slice(-4)
+      .map((msg) => `${msg.role === "user" ? "User" : "Coach"}: ${msg.content}`)
+      .join("\n")}
 
 User's Current Question: ${currentQuestion}`;
 
@@ -155,14 +177,25 @@ User's Current Question: ${currentQuestion}`;
     return basePrompt + `\nRespond helpfully and supportively.`;
   }
 
-  // v2 - More conversational and structured
+  // v2 - Structured JSON output for better parsing and quality
   return (
     basePrompt +
-    `\nRespond as a helpful financial coach:
+    `\n\nPlease respond with a JSON object in this exact format:
+{
+  "response": "Your main response to the user's question. Be direct, clear, and supportive. Use plain language. Keep it under 150 words.",
+  "tone": "supportive|encouraging|practical|gentle",
+  "keyPoints": ["Key point 1", "Key point 2"],
+  "suggestedAction": "One specific, actionable next step the user can take (optional, only if relevant)"
+}
+
+Guidelines:
 - Answer their question directly and clearly
-- Use plain language (avoid jargon)
-- Be supportive and non-judgmental
-- If appropriate, suggest one actionable next step
-- Keep your response conversational and under 150 words`
+- Use plain language (avoid financial jargon like "amortization", "liquidity", "equity" unless you explain it simply)
+- Be supportive and non-judgmental (never shame or criticize)
+- Reference their goals and concerns when relevant
+- If they ask about spending, reference their recent transactions if provided
+- Keep responses conversational, warm, and human
+- Never give specific investment advice or guarantee outcomes
+- Return ONLY valid JSON, no additional text or markdown`
   );
 }
