@@ -26,29 +26,130 @@ function getHuggingFaceClient(): InferenceClient {
   return new InferenceClient(getHuggingFaceApiKey());
 }
 
+/**
+ * Create a promise that rejects after a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
+/**
+ * Retry a function with exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on certain errors (auth, validation)
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (
+          errorMsg.includes("authentication") ||
+          errorMsg.includes("unauthorized") ||
+          errorMsg.includes("invalid") ||
+          errorMsg.includes("not found")
+        ) {
+          throw error;
+        }
+      }
+
+      // If this was the last attempt, throw
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s...
+      const delayMs = baseDelayMs * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Get a user-friendly error message from HF API errors
+ */
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+
+    if (msg.includes("timeout")) {
+      return "The AI service is taking too long to respond. Please try again.";
+    }
+    if (msg.includes("authentication") || msg.includes("unauthorized")) {
+      return "Authentication failed. Please check your API key.";
+    }
+    if (msg.includes("not found") || msg.includes("404")) {
+      return "The AI model is temporarily unavailable. Please try again later.";
+    }
+    if (msg.includes("provider") || msg.includes("400")) {
+      return "The AI service is experiencing issues. Please try again in a moment.";
+    }
+    if (msg.includes("rate limit") || msg.includes("429")) {
+      return "Too many requests. Please wait a moment and try again.";
+    }
+
+    return "The AI service encountered an error. Please try again.";
+  }
+
+  return "An unexpected error occurred. Please try again.";
+}
+
 async function runChatCompletion(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   parameters: { max_new_tokens: number; temperature: number }
 ): Promise<string> {
   const client = getHuggingFaceClient();
+  const timeoutMs = 30000; // 30 seconds timeout
+
   try {
-    // Use chatCompletion directly and pin the provider to avoid third-party routing issues.
-    const result = await client.chatCompletion({
-      model: HF_MODEL_ID,
-      messages,
-      max_tokens: parameters.max_new_tokens,
-      temperature: parameters.temperature,
-    });
+    const result = await withRetry(
+      () =>
+        withTimeout(
+          client.chatCompletion({
+            model: HF_MODEL_ID,
+            messages,
+            max_tokens: parameters.max_new_tokens,
+            temperature: parameters.temperature,
+          }),
+          timeoutMs
+        ),
+      2, // Max 2 retries (3 total attempts)
+      1000 // Base delay 1s
+    );
 
     const content = result.choices?.[0]?.message?.content;
-    return (content || "").trim();
+    if (!content || content.trim().length === 0) {
+      throw new Error("Received empty response from AI model");
+    }
+
+    return content.trim();
   } catch (error: any) {
+    const friendlyMessage = getErrorMessage(error);
     console.error("Hugging Face SDK error:", {
       model: HF_MODEL_ID,
       message: error?.message,
+      friendlyMessage,
       error,
     });
-    throw error;
+
+    // Throw with friendly message for better UX
+    throw new Error(friendlyMessage);
   }
 }
 
