@@ -7,14 +7,17 @@
 
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 import { getAnalysisPrompt } from "./prompts";
-
-const HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models";
-const HF_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"; // Public, stable instruct model
+import { InferenceClient } from "@huggingface/inference";
+const HF_MODEL_ID = "HuggingFaceH4/zephyr-7b-beta"; // Public, stable instruct model
 
 interface HuggingFaceResponse {
   generated_text?: string;
   error?: string;
 }
+
+type InferenceTextGenerationResult = {
+  generated_text?: string;
+};
 
 function getHuggingFaceApiKey(): string {
   const apiKey = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY;
@@ -24,6 +27,10 @@ function getHuggingFaceApiKey(): string {
     );
   }
   return apiKey;
+}
+
+function getHuggingFaceClient(): InferenceClient {
+  return new InferenceClient(getHuggingFaceApiKey());
 }
 
 function formatCoachPrompt(prompt: string): string {
@@ -43,15 +50,21 @@ function extractGeneratedText(
   return (result?.generated_text || "").trim();
 }
 
-async function logHuggingFaceError(
-  response: Response,
+async function logHuggingFaceClientError(
+  error: unknown,
   modelId: string
 ): Promise<void> {
+  const response = (error as { response?: Response })?.response;
+  if (!response) {
+    console.error("Hugging Face API error", { modelId, error });
+    return;
+  }
+
   let bodyText = "";
   try {
     bodyText = await response.text();
-  } catch (error) {
-    console.warn("Failed to read Hugging Face error body:", error);
+  } catch (readError) {
+    console.warn("Failed to read Hugging Face error body:", readError);
   }
 
   console.error("Hugging Face API error", {
@@ -62,6 +75,23 @@ async function logHuggingFaceError(
   });
 }
 
+async function runTextGeneration(
+  prompt: string,
+  parameters: { max_new_tokens: number; temperature: number }
+): Promise<string> {
+  const client = getHuggingFaceClient();
+  const result = (await client.textGeneration({
+    model: HF_MODEL_ID,
+    inputs: prompt,
+    parameters: {
+      ...parameters,
+      return_full_text: false,
+    },
+  })) as InferenceTextGenerationResult | string;
+
+  return extractGeneratedText(result as HuggingFaceResponse | string);
+}
+
 /**
  * Call Hugging Face API to analyze spending
  */
@@ -70,39 +100,16 @@ export async function analyzeWithHuggingFace(
   transactions: Transaction[],
   prompt: string
 ): Promise<SpendingAnalysis> {
-  const apiKey = getHuggingFaceApiKey();
-
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 300,
-          temperature: 0.7,
-          return_full_text: false,
-        },
-      }),
+    const generatedText = await runTextGeneration(prompt, {
+      max_new_tokens: 300,
+      temperature: 0.7,
     });
-
-    if (!response.ok) {
-      await logHuggingFaceError(response, HF_MODEL_ID);
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${response.statusText}`
-      );
-    }
-
-    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
-      await response.json();
-    const generatedText = extractGeneratedText(data);
 
     // Parse the LLM response into SpendingAnalysis format
     return parseLLMResponse(generatedText, transactions);
   } catch (error) {
+    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
@@ -123,35 +130,11 @@ export interface CoachResponseData {
  * Returns structured response if available, otherwise plain text
  */
 export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
-  const apiKey = getHuggingFaceApiKey();
-
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: formatCoachPrompt(prompt),
-        parameters: {
-          max_new_tokens: 300,
-          temperature: 0.7,
-          return_full_text: false,
-        },
-      }),
+    const generatedText = await runTextGeneration(formatCoachPrompt(prompt), {
+      max_new_tokens: 300,
+      temperature: 0.7,
     });
-
-    if (!response.ok) {
-      await logHuggingFaceError(response, HF_MODEL_ID);
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${response.statusText}`
-      );
-    }
-
-    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
-      await response.json();
-    const generatedText = extractGeneratedText(data);
 
     // Try to parse as JSON (for structured responses)
     try {
@@ -182,6 +165,7 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
     // Fallback to plain text
     return generatedText.trim();
   } catch (error) {
+    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
@@ -315,38 +299,13 @@ export function generateFallbackAnalysis(
  * Call Hugging Face API for daily/weekly insights generation
  */
 export async function generateInsight(prompt: string): Promise<string> {
-  const apiKey = getHuggingFaceApiKey();
-
   try {
-    const response = await fetch(`${HUGGINGFACE_API_URL}/${HF_MODEL_ID}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 300,
-          temperature: 0.8,
-          return_full_text: false,
-        },
-      }),
+    return await runTextGeneration(prompt, {
+      max_new_tokens: 300,
+      temperature: 0.8,
     });
-
-    if (!response.ok) {
-      await logHuggingFaceError(response, HF_MODEL_ID);
-      throw new Error(
-        `Hugging Face API error: ${response.status} - ${response.statusText}`
-      );
-    }
-
-    const data: HuggingFaceResponse | HuggingFaceResponse[] | string =
-      await response.json();
-    const generatedText = extractGeneratedText(data);
-
-    return generatedText;
   } catch (error) {
+    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
