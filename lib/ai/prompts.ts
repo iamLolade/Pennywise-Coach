@@ -6,7 +6,7 @@
 export const PROMPT_VERSIONS = {
   v1: "v1-baseline",
   v2: "v2-improved",
-  v3: "v3-structured-json",
+  v3: "v3-structured-json", // Structured JSON output for coach and insights
 } as const;
 
 export type PromptVersion = (typeof PROMPT_VERSIONS)[keyof typeof PROMPT_VERSIONS];
@@ -110,14 +110,36 @@ ${recentTransactions
     return basePrompt + `\nProvide a brief, helpful insight.`;
   }
 
-  // v2 - More structured and actionable
-  return (
-    basePrompt +
-    `\nProvide:
+  if (version === PROMPT_VERSIONS.v2) {
+    // v2 - More structured and actionable
+    return (
+      basePrompt +
+      `\nProvide:
 - One positive observation about their financial behavior
 - One gentle suggestion or reminder
 - Keep it under 3 sentences
 - Use a warm, supportive tone`
+    );
+  }
+
+  // v3 - Structured JSON output
+  return (
+    basePrompt +
+    `\nRespond with ONLY a valid JSON object. Do not include any text before or after the JSON. Use this exact structure:
+
+{
+  "title": "A short, encouraging title (max 8 words)",
+  "content": "A brief, supportive insight about their financial behavior (2-3 sentences)",
+  "suggestedAction": "One clear, actionable next step (1 sentence)"
+}
+
+IMPORTANT:
+- Return ONLY the JSON object, no markdown, no code blocks, no explanation
+- Use a warm, supportive, non-judgmental tone
+- Focus on positive observations and gentle guidance
+- Keep content concise (under 100 words total)
+- Ensure the suggestedAction is specific and achievable
+- Never give investment advice or make guarantees`
   );
 }
 

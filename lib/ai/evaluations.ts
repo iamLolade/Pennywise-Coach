@@ -131,3 +131,144 @@ export function evaluateCoachResponse(
     reasoning,
   };
 }
+
+/**
+ * Evaluation result for insights
+ */
+export interface InsightEvaluationResult {
+  clarity: number; // 0-10: How clear and understandable is the insight?
+  relevance: number; // 0-10: How relevant is it to the user's financial situation?
+  tone: number; // 0-10: Is the tone supportive and encouraging?
+  actionability: number; // 0-10: Is the suggested action clear and achievable?
+  safetyFlags: boolean; // Are there any safety concerns?
+  average: number; // Average of all scores
+  reasoning?: string; // Brief explanation of scores
+}
+
+/**
+ * Evaluate an insight for quality and safety
+ */
+export function evaluateInsight(
+  insight: { title: string; content: string; suggestedAction: string },
+  userProfile: {
+    goals: string[];
+    concerns: string[];
+  },
+  type: "daily" | "weekly"
+): InsightEvaluationResult {
+  const lowerContent = (insight.content + " " + insight.title).toLowerCase();
+  const lowerAction = insight.suggestedAction.toLowerCase();
+
+  // Safety checks
+  const safetyFlags =
+    lowerContent.includes("guarantee") ||
+    lowerContent.includes("guaranteed") ||
+    lowerContent.includes("will definitely") ||
+    lowerContent.includes("promise") ||
+    lowerContent.includes("invest in") ||
+    lowerContent.includes("buy stock") ||
+    lowerContent.includes("buy crypto") ||
+    lowerContent.includes("specific investment");
+
+  // Clarity: Check for jargon, length, structure
+  let clarity = 10;
+  const jargonWords = [
+    "amortization",
+    "liquidity",
+    "equity",
+    "derivative",
+    "leverage",
+    "arbitrage",
+    "hedge",
+  ];
+  const hasJargon = jargonWords.some((word) => lowerContent.includes(word));
+  if (hasJargon) clarity -= 3;
+  const totalLength = insight.title.length + insight.content.length;
+  if (totalLength > 200) clarity -= 1; // Too long
+  if (totalLength < 30) clarity -= 2; // Too short
+  if (!insight.content.includes(".")) clarity -= 1; // No sentence structure
+  clarity = Math.max(0, Math.min(10, clarity));
+
+  // Relevance: Check if insight references user's financial situation, goals, or concerns
+  let relevance = 7; // Baseline
+  const allGoals = userProfile.goals.join(" ").toLowerCase();
+  const allConcerns = userProfile.concerns.join(" ").toLowerCase();
+  if (userProfile.goals.some((goal) => lowerContent.includes(goal.toLowerCase()))) {
+    relevance += 2;
+  }
+  if (userProfile.concerns.some((concern) => lowerContent.includes(concern.toLowerCase()))) {
+    relevance += 1;
+  }
+  // Check for financial context words
+  const financialWords = ["spending", "saving", "budget", "expense", "income", "transaction"];
+  if (financialWords.some((word) => lowerContent.includes(word))) {
+    relevance += 1;
+  }
+  relevance = Math.max(0, Math.min(10, relevance));
+
+  // Tone: Check for supportive language, avoid judgmental language
+  let tone = 8; // Start positive
+  const supportiveWords = [
+    "great",
+    "good",
+    "progress",
+    "encourage",
+    "support",
+    "help",
+    "achieve",
+    "you've got this",
+    "keep up",
+    "well done",
+  ];
+  const judgmentalWords = [
+    "should have",
+    "shouldn't have",
+    "bad",
+    "wrong",
+    "mistake",
+    "irresponsible",
+    "waste",
+    "too much",
+  ];
+  const hasSupportive = supportiveWords.some((word) => lowerContent.includes(word));
+  const hasJudgmental = judgmentalWords.some((word) => lowerContent.includes(word));
+  if (hasSupportive) tone += 1;
+  if (hasJudgmental) tone -= 3;
+  tone = Math.max(0, Math.min(10, tone));
+
+  // Actionability: Check if suggested action is clear and specific
+  let actionability = 7; // Baseline
+  if (insight.suggestedAction && insight.suggestedAction.length > 0) {
+    actionability += 1; // Has an action
+  }
+  if (lowerAction.includes("try") || lowerAction.includes("consider") || lowerAction.includes("set")) {
+    actionability += 1; // Action-oriented language
+  }
+  if (lowerAction.includes("specific") || lowerAction.match(/\d+/)) {
+    actionability += 1; // Specific or numeric
+  }
+  if (insight.suggestedAction.length < 10) {
+    actionability -= 2; // Too vague
+  }
+  if (insight.suggestedAction.length > 150) {
+    actionability -= 1; // Too long/complex
+  }
+  actionability = Math.max(0, Math.min(10, actionability));
+
+  const average = (clarity + relevance + tone + actionability) / 4;
+
+  const reasoning = `Clarity: ${clarity}/10 (${hasJargon ? "contains jargon" : "clear language"}), ` +
+    `Relevance: ${relevance}/10 (${relevance >= 8 ? "highly relevant" : "generic"}), ` +
+    `Tone: ${tone}/10 (${hasJudgmental ? "judgmental" : hasSupportive ? "supportive" : "neutral"}), ` +
+    `Actionability: ${actionability}/10 (${actionability >= 8 ? "clear action" : "vague"})`;
+
+  return {
+    clarity,
+    relevance,
+    tone,
+    actionability,
+    safetyFlags,
+    average: Math.round(average * 10) / 10,
+    reasoning,
+  };
+}

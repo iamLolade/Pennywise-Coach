@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   generateInsight,
   generateFallbackInsight,
+  type InsightResponseData,
 } from "@/lib/ai/huggingface";
 import { getInsightPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
-import { generateTraceId, logTrace } from "@/lib/opik/client";
+import { evaluateInsight } from "@/lib/ai/evaluations";
+import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
 import {
   calculateTotalIncome,
   calculateTotalExpenses,
@@ -27,7 +29,7 @@ export async function POST(request: NextRequest) {
       userProfile,
       transactions,
       type = "daily", // "daily" or "weekly"
-      promptVersion = PROMPT_VERSIONS.v2,
+      promptVersion = PROMPT_VERSIONS.v3, // Default to v3 for structured JSON
     } = body;
 
     // Validate input
@@ -76,20 +78,50 @@ export async function POST(request: NextRequest) {
     // Try AI generation first, fallback to rule-based if it fails
     let insight: { title: string; content: string; suggestedAction: string };
     let usedAI = false;
+    let evaluationScore: number | undefined;
 
     try {
       const aiResponse = await generateInsight(prompt);
       usedAI = true;
 
-      // Parse AI response - try to extract structured data
-      // For now, we'll use the full response as content and generate title/action
-      const lines = aiResponse.split("\n").filter((line) => line.trim());
-      
-      insight = {
-        title: lines[0]?.replace(/^[-*]\s*/, "").trim() || "Financial insight",
-        content: lines.slice(0, 2).join(" ").trim() || aiResponse,
-        suggestedAction: lines[lines.length - 1]?.replace(/^[-*]\s*/, "").trim() || "Keep tracking your spending to build better habits.",
-      };
+      // Handle structured response or plain text
+      if (typeof aiResponse === "object" && "title" in aiResponse && "content" in aiResponse) {
+        // Structured response
+        insight = aiResponse as InsightResponseData;
+      } else {
+        // Plain text response - parse it
+        const lines = (aiResponse as string).split("\n").filter((line) => line.trim());
+        insight = {
+          title: lines[0]?.replace(/^[-*]\s*/, "").trim() || "Financial insight",
+          content: lines.slice(0, 2).join(" ").trim() || (aiResponse as string),
+          suggestedAction: lines[lines.length - 1]?.replace(/^[-*]\s*/, "").trim() || "Keep tracking your spending to build better habits.",
+        };
+      }
+
+      // Evaluate the insight
+      try {
+        const evaluation = evaluateInsight(insight, userProfile, type);
+        evaluationScore = evaluation.average;
+
+        // Log evaluation to Opik
+        await logEvaluation({
+          traceId,
+          experimentName: "insights-generation",
+          promptVersion,
+          evaluation: {
+            clarity: evaluation.clarity,
+            relevance: evaluation.relevance,
+            tone: evaluation.tone,
+            actionability: evaluation.actionability,
+            safetyFlags: evaluation.safetyFlags,
+            average: evaluation.average,
+            reasoning: evaluation.reasoning,
+          },
+        });
+      } catch (evalError) {
+        console.warn("Failed to evaluate insight:", evalError);
+        // Continue without evaluation
+      }
     } catch (error) {
       console.warn("AI insight generation failed, using fallback:", error);
       // Fallback to rule-based insight
@@ -115,6 +147,7 @@ export async function POST(request: NextRequest) {
         latency,
         usedAI,
         type,
+        ...(evaluationScore !== undefined && { evaluationScore }),
       },
     });
 

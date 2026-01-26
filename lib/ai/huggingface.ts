@@ -405,15 +405,25 @@ export function generateFallbackAnalysis(
 }
 
 /**
- * Call Hugging Face API for daily/weekly insights generation
+ * Structured insight response from AI
  */
-export async function generateInsight(prompt: string): Promise<string> {
+export interface InsightResponseData {
+  title: string;
+  content: string;
+  suggestedAction: string;
+}
+
+/**
+ * Call Hugging Face API for daily/weekly insights generation
+ * Returns structured response if available, otherwise plain text
+ */
+export async function generateInsight(prompt: string): Promise<InsightResponseData | string> {
   try {
-    return await runChatCompletion(
+    const generatedText = await runChatCompletion(
       [
         {
           role: "system",
-          content: "You are a supportive financial coach. Provide concise, actionable insights.",
+          content: "You are a supportive financial coach. Provide concise, actionable insights in the JSON format requested.",
         },
         { role: "user", content: prompt },
       ],
@@ -422,8 +432,43 @@ export async function generateInsight(prompt: string): Promise<string> {
         temperature: 0.8,
       }
     );
+
+    // Try to parse as JSON (for structured responses)
+    try {
+      // Remove markdown code blocks if present
+      let cleanedText = generatedText.trim();
+      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      cleanedText = cleanedText.trim();
+
+      // Try to extract JSON object
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate structure
+        if (
+          parsed.title &&
+          parsed.content &&
+          parsed.suggestedAction &&
+          typeof parsed.title === "string" &&
+          typeof parsed.content === "string" &&
+          typeof parsed.suggestedAction === "string"
+        ) {
+          return {
+            title: parsed.title,
+            content: parsed.content,
+            suggestedAction: parsed.suggestedAction,
+          } as InsightResponseData;
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, return plain text
+      console.warn("Failed to parse insight response as JSON, using plain text:", parseError);
+    }
+
+    // Fallback to plain text
+    return generatedText.trim();
   } catch (error) {
-    console.error("Hugging Face API error:", error);
+    // Error already logged in runChatCompletion
     throw error;
   }
 }
