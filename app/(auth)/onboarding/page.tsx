@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { OnboardingForm } from "@/components/onboarding/OnboardingForm";
@@ -41,8 +42,23 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-background">
         <Container className="flex items-center justify-between py-4">
-          <Link href="/" className="text-lg font-semibold text-primary">
-            Pennywise Coach
+          <Link href="/" className="flex items-center gap-2.5 text-lg font-semibold transition hover:opacity-80">
+            <div className="relative h-10 w-10 flex-shrink-0">
+              <Image
+                src="/mascot.png"
+                alt="Pennywise Coach Mascot"
+                fill
+                className="object-contain"
+                priority
+                unoptimized
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
+            <span className="bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent font-bold tracking-tight">
+              Pennywise Coach
+            </span>
           </Link>
         </Container>
       </header>
