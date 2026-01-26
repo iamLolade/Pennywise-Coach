@@ -57,8 +57,28 @@ export function AnimatedAuthForm({
     { label: "At least 8 characters", met: password.length >= 8 },
     { label: "One number", met: /\d/.test(password) },
     { label: "One uppercase letter", met: /[A-Z]/.test(password) },
+    { label: "One lowercase letter", met: /[a-z]/.test(password) },
+    { label: "One special character", met: /[^A-Za-z0-9]/.test(password) },
   ];
   const showPasswordChecks = isSignup && password.length > 0;
+  const metCount = passwordRequirements.filter((requirement) => requirement.met).length;
+  const strengthRatio = metCount / passwordRequirements.length;
+  const strengthLabel =
+    strengthRatio === 1
+      ? "Strong"
+      : strengthRatio >= 0.6
+      ? "Good"
+      : strengthRatio >= 0.4
+      ? "Fair"
+      : "Weak";
+  const strengthColor =
+    strengthRatio === 1
+      ? "bg-success"
+      : strengthRatio >= 0.6
+      ? "bg-primary"
+      : strengthRatio >= 0.4
+      ? "bg-amber-400"
+      : "bg-destructive";
 
   return (
     <motion.form
@@ -149,6 +169,18 @@ export function AnimatedAuthForm({
               Characters:{" "}
               <span className="font-medium text-foreground">{password.length}</span>
             </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span>Password strength</span>
+                <span className="font-medium text-foreground">{strengthLabel}</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${strengthColor}`}
+                  style={{ width: `${Math.max(10, strengthRatio * 100)}%` }}
+                />
+              </div>
+            </div>
             <ul className="space-y-1">
               {passwordRequirements.map((requirement) => (
                 <li key={requirement.label} className="flex items-center gap-2">

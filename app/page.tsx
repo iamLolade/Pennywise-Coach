@@ -83,19 +83,59 @@ const stats = [
 export default function Home() {
   const [showSampleInsight, setShowSampleInsight] = React.useState(false);
 
-  const sampleInsight = {
-    title: "Dining is trending 18% higher this week",
-    content: "You're still on track to save, but choosing two home-cooked meals could free up $60 for your emergency fund.",
-    patterns: [
-      "Your dining spending has increased this week compared to your average",
-      "You're maintaining a positive savings rate overall",
-      "Small adjustments in dining could accelerate your emergency fund goal"
-    ],
-    suggestions: [
-      "Consider meal planning for 2-3 days this week to reduce dining out",
-      "Set a weekly dining budget that aligns with your emergency fund goal",
-      "Track your dining expenses for the next week to see the impact of small changes"
-    ]
+  const sampleInsights = [
+    {
+      title: "Dining is trending 18% higher this week",
+      content:
+        "You're still on track to save, but choosing two home-cooked meals could free up $60 for your emergency fund.",
+      patterns: [
+        "Your dining spending has increased this week compared to your average",
+        "You're maintaining a positive savings rate overall",
+        "Small adjustments in dining could accelerate your emergency fund goal",
+      ],
+      suggestions: [
+        "Consider meal planning for 2-3 days this week to reduce dining out",
+        "Set a weekly dining budget that aligns with your emergency fund goal",
+        "Track your dining expenses for the next week to see the impact of small changes",
+      ],
+    },
+    {
+      title: "Subscriptions are adding up quietly",
+      content:
+        "You're spending about $78/month on subscriptions. Trimming one or two could free up funds for your goal.",
+      patterns: [
+        "Multiple small subscriptions are stacking into a larger total",
+        "Your fixed monthly costs are trending slightly higher",
+        "You're still making progress toward your savings target",
+      ],
+      suggestions: [
+        "Review your subscriptions and pause the lowest‑value one",
+        "Set a monthly cap for subscription spending",
+        "Check for annual plans that cost less overall",
+      ],
+    },
+    {
+      title: "Groceries look steady — great job",
+      content:
+        "Your grocery spending is consistent week to week. That stability helps your overall budget stay on track.",
+      patterns: [
+        "Groceries are within your typical range",
+        "Essential spending is stable and predictable",
+        "You have room to focus on one smaller category next",
+      ],
+      suggestions: [
+        "Pick one flexible category to optimize this week",
+        "Set a small weekly savings target to build momentum",
+        "Keep a short list before shopping to avoid impulse adds",
+      ],
+    },
+  ];
+  const [sampleInsightIndex, setSampleInsightIndex] = React.useState(0);
+  const sampleInsight = sampleInsights[sampleInsightIndex];
+
+  const openSampleInsight = () => {
+    setSampleInsightIndex((prev) => (prev + 1) % sampleInsights.length);
+    setShowSampleInsight(true);
   };
 
   return (
@@ -146,9 +186,9 @@ export default function Home() {
                 You’re still on track to save, but choosing two home-cooked meals
                 could free up $60 for your emergency fund.
               </p>
-              <Button 
+              <Button
                 variant="secondary"
-                onClick={() => setShowSampleInsight(true)}
+                onClick={openSampleInsight}
               >
                 View breakdown
               </Button>
@@ -265,7 +305,7 @@ export default function Home() {
                 Get started free
               </Link>
               <Button
-                onClick={() => setShowSampleInsight(true)}
+                onClick={openSampleInsight}
                 variant="secondary"
                 className="h-11 w-full sm:w-auto"
               >

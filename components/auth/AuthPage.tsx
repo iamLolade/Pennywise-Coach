@@ -129,7 +129,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       </header>
 
       <motion.main
-        className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl items-center px-4 py-8 sm:py-12"
+        className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl items-start px-4 py-8 sm:py-12 lg:py-16"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
