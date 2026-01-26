@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { Menu, X } from "lucide-react";
 
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { signOut } from "@/lib/supabase/auth";
@@ -17,6 +18,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isSigningOut, setIsSigningOut] = React.useState(false);
   const [showSignOutModal, setShowSignOutModal] = React.useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const navLinks = [
     { href: "/dashboard", label: "Dashboard" },
@@ -29,6 +31,7 @@ export default function DashboardLayout({
 
   const handleSignOutClick = () => {
     setShowSignOutModal(true);
+    setIsMobileMenuOpen(false);
   };
 
   const handleSignOutConfirm = async () => {
@@ -46,7 +49,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <Link
               href="/dashboard"
@@ -69,7 +72,9 @@ export default function DashboardLayout({
                 Pennywise Coach
               </span>
             </Link>
-            <div className="flex items-center gap-1">
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-1">
               {navLinks.map((link) => {
                 const active = isActive(link.href);
                 return (
@@ -101,7 +106,55 @@ export default function DashboardLayout({
                 {isSigningOut ? "Signing out..." : "Sign out"}
               </button>
             </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all duration-200"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
           </div>
+
+          {/* Mobile Menu */}
+          {isMobileMenuOpen && (
+            <div className="md:hidden mt-4 pt-4 border-t border-border space-y-1">
+              {navLinks.map((link) => {
+                const active = isActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`
+                      block px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
+                      ${
+                        active
+                          ? "text-primary bg-primary/10"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }
+                    `}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+              <div className="pt-2 mt-2 border-t border-border">
+                <button
+                  onClick={handleSignOutClick}
+                  disabled={isSigningOut}
+                  className="w-full text-left px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all duration-200 disabled:opacity-50"
+                >
+                  {isSigningOut ? "Signing out..." : "Sign out"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
       <main>{children}</main>

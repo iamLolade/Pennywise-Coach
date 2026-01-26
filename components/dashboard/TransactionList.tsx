@@ -63,9 +63,9 @@ export function TransactionList({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="group flex items-center justify-between py-3 px-1 -mx-1 rounded-md hover:bg-muted/50 transition-colors border-b border-border last:border-0 last:pb-0 first:pt-0"
+                className="group flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 py-3 px-1 -mx-1 rounded-md hover:bg-muted/50 transition-colors border-b border-border last:border-0 last:pb-0 first:pt-0"
               >
-                <div className="flex-1 min-w-0 pr-4">
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
                     {transaction.description}
                   </p>
@@ -79,33 +79,31 @@ export function TransactionList({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className={`text-base font-semibold whitespace-nowrap ${amountColor}`}>
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                  <div className={`text-sm sm:text-base font-semibold whitespace-nowrap ${amountColor}`}>
                     {isIncome ? "+" : "-"}
                     {formatCurrency(Math.abs(transaction.amount), currency)}
                   </div>
                   {(onEdit || onDelete) && (
-                    <div className="flex items-center gap-2 opacity-100">
+                    <div className="flex items-center gap-1.5 sm:gap-2 opacity-100">
                       {onEdit && (
                         <Button
                           variant="ghost"
                           onClick={() => onEdit(transaction)}
-                          className="h-8 px-2 text-foreground bg-muted/60 hover:bg-muted border border-border"
+                          className="h-7 sm:h-8 px-1.5 sm:px-2 text-foreground bg-muted/60 hover:bg-muted border border-border"
                           aria-label="Edit transaction"
                         >
-                          <Pencil className="h-4 w-4 text-foreground" strokeWidth={2} />
-                          {/* <span className="text-xs font-medium">Edit</span> */}
+                          <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-foreground" strokeWidth={2} />
                         </Button>
                       )}
                       {onDelete && (
                         <Button
                           variant="ghost"
                           onClick={() => onDelete(transaction)}
-                          className="h-8 px-2 text-destructive bg-destructive/10 hover:bg-destructive/20 border border-destructive/30"
+                          className="h-7 sm:h-8 px-1.5 sm:px-2 text-destructive bg-destructive/10 hover:bg-destructive/20 border border-destructive/30"
                           aria-label="Delete transaction"
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" strokeWidth={2} />
-                          {/* <span className="text-xs font-medium">Delete</span> */}
+                          <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" strokeWidth={2} />
                         </Button>
                       )}
                     </div>
