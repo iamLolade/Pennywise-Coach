@@ -102,7 +102,7 @@ export default function Home() {
     <div className="min-h-screen bg-background text-foreground">
       <Header />
 
-      <Section id="hero" className="pt-16">
+      <Section id="hero" className="pt-16 scroll-mt-20">
         <Container className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
             <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
@@ -165,7 +165,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section id="features">
+      <Section id="features" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -192,7 +192,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section id="how-it-works">
+      <Section id="how-it-works" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -221,7 +221,7 @@ export default function Home() {
         </Container>
       </Section>
 
-      <Section id="faq">
+      <Section id="faq" className="scroll-mt-20">
         <Container>
           <div className="mb-10 max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
