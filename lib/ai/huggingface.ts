@@ -8,16 +8,9 @@
 import type { SpendingAnalysis, Transaction, UserProfile } from "@/types";
 import { getAnalysisPrompt } from "./prompts";
 import { InferenceClient } from "@huggingface/inference";
-const HF_MODEL_ID = "HuggingFaceH4/zephyr-7b-beta"; // Public, stable instruct model
 
-interface HuggingFaceResponse {
-  generated_text?: string;
-  error?: string;
-}
-
-type InferenceTextGenerationResult = {
-  generated_text?: string;
-};
+// Use a model that works reliably with HF router (per HF docs example)
+const HF_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct";
 
 function getHuggingFaceApiKey(): string {
   const apiKey = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY;
@@ -33,63 +26,30 @@ function getHuggingFaceClient(): InferenceClient {
   return new InferenceClient(getHuggingFaceApiKey());
 }
 
-function formatCoachPrompt(prompt: string): string {
-  return `You are a calm and responsible financial coach.\nUser: ${prompt}\nAssistant:`;
-}
-
-function extractGeneratedText(
-  payload: HuggingFaceResponse | HuggingFaceResponse[] | string
-): string {
-  if (typeof payload === "string") {
-    return payload.trim();
-  }
-  const result = Array.isArray(payload) ? payload[0] : payload;
-  if (result?.error) {
-    throw new Error(`Hugging Face API error: ${result.error}`);
-  }
-  return (result?.generated_text || "").trim();
-}
-
-async function logHuggingFaceClientError(
-  error: unknown,
-  modelId: string
-): Promise<void> {
-  const response = (error as { response?: Response })?.response;
-  if (!response) {
-    console.error("Hugging Face API error", { modelId, error });
-    return;
-  }
-
-  let bodyText = "";
-  try {
-    bodyText = await response.text();
-  } catch (readError) {
-    console.warn("Failed to read Hugging Face error body:", readError);
-  }
-
-  console.error("Hugging Face API error", {
-    status: response.status,
-    statusText: response.statusText,
-    modelId,
-    body: bodyText || "No response body",
-  });
-}
-
-async function runTextGeneration(
-  prompt: string,
+async function runChatCompletion(
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   parameters: { max_new_tokens: number; temperature: number }
 ): Promise<string> {
   const client = getHuggingFaceClient();
-  const result = (await client.textGeneration({
-    model: HF_MODEL_ID,
-    inputs: prompt,
-    parameters: {
-      ...parameters,
-      return_full_text: false,
-    },
-  })) as InferenceTextGenerationResult | string;
+  try {
+    // Use chatCompletion directly and pin the provider to avoid third-party routing issues.
+    const result = await client.chatCompletion({
+      model: HF_MODEL_ID,
+      messages,
+      max_tokens: parameters.max_new_tokens,
+      temperature: parameters.temperature,
+    });
 
-  return extractGeneratedText(result as HuggingFaceResponse | string);
+    const content = result.choices?.[0]?.message?.content;
+    return (content || "").trim();
+  } catch (error: any) {
+    console.error("Hugging Face SDK error:", {
+      model: HF_MODEL_ID,
+      message: error?.message,
+      error,
+    });
+    throw error;
+  }
 }
 
 /**
@@ -101,15 +61,23 @@ export async function analyzeWithHuggingFace(
   prompt: string
 ): Promise<SpendingAnalysis> {
   try {
-    const generatedText = await runTextGeneration(prompt, {
-      max_new_tokens: 300,
-      temperature: 0.7,
-    });
+    const generatedText = await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a helpful financial analysis assistant. Respond with the JSON format requested in the prompt.",
+        },
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.7,
+      }
+    );
 
     // Parse the LLM response into SpendingAnalysis format
     return parseLLMResponse(generatedText, transactions);
   } catch (error) {
-    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
@@ -131,10 +99,19 @@ export interface CoachResponseData {
  */
 export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
   try {
-    const generatedText = await runTextGeneration(formatCoachPrompt(prompt), {
-      max_new_tokens: 300,
-      temperature: 0.7,
-    });
+    const generatedText = await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a calm and responsible financial coach.",
+        },
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.7,
+      }
+    );
 
     // Try to parse as JSON (for structured responses)
     try {
@@ -165,7 +142,6 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
     // Fallback to plain text
     return generatedText.trim();
   } catch (error) {
-    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
@@ -300,12 +276,20 @@ export function generateFallbackAnalysis(
  */
 export async function generateInsight(prompt: string): Promise<string> {
   try {
-    return await runTextGeneration(prompt, {
-      max_new_tokens: 300,
-      temperature: 0.8,
-    });
+    return await runChatCompletion(
+      [
+        {
+          role: "system",
+          content: "You are a supportive financial coach. Provide concise, actionable insights.",
+        },
+        { role: "user", content: prompt },
+      ],
+      {
+        max_new_tokens: 300,
+        temperature: 0.8,
+      }
+    );
   } catch (error) {
-    await logHuggingFaceClientError(error, HF_MODEL_ID);
     console.error("Hugging Face API error:", error);
     throw error;
   }
