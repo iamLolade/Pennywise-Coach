@@ -133,8 +133,13 @@ export default function Home() {
   const [sampleInsightIndex, setSampleInsightIndex] = React.useState(0);
   const sampleInsight = sampleInsights[sampleInsightIndex];
 
-  const openSampleInsight = () => {
+  const openRandomSampleInsight = () => {
     setSampleInsightIndex((prev) => (prev + 1) % sampleInsights.length);
+    setShowSampleInsight(true);
+  };
+
+  const openDiningBreakdown = () => {
+    setSampleInsightIndex(0);
     setShowSampleInsight(true);
   };
 
@@ -188,7 +193,7 @@ export default function Home() {
               </p>
               <Button
                 variant="secondary"
-                onClick={openSampleInsight}
+                onClick={openDiningBreakdown}
               >
                 View breakdown
               </Button>
@@ -305,7 +310,7 @@ export default function Home() {
                 Get started free
               </Link>
               <Button
-                onClick={openSampleInsight}
+                onClick={openRandomSampleInsight}
                 variant="secondary"
                 className="h-11 w-full sm:w-auto"
               >
