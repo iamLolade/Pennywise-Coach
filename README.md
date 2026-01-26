@@ -68,9 +68,13 @@ Tables included:
 
 ## AI + Opik Notes
 
-- Prompts are versioned in `lib/ai/prompts.ts`
-- Trace logging lives in `lib/opik/client.ts`
-- Coach + Insights endpoints log traces for evaluation
+- **Model**: `meta-llama/Llama-3.1-8B-Instruct` via Hugging Face Inference API
+- **Client**: `@huggingface/inference` with `InferenceClient` and `chatCompletion`
+- **Features**: 30s timeout, automatic retries (2 retries with exponential backoff), friendly error messages
+- **Prompts**: Versioned in `lib/ai/prompts.ts` (v1, v2, v3)
+- **Trace logging**: `lib/opik/client.ts` - all AI calls log traces for evaluation
+- **Evaluation**: Coach responses are automatically evaluated (clarity, helpfulness, tone, alignment, safety)
+- **Fallbacks**: Rule-based responses when AI fails (graceful degradation)
 
 ## Scripts
 
