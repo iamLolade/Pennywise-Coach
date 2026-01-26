@@ -260,7 +260,8 @@ export default function Home() {
               </Link>
               <Button
                 onClick={() => setShowSampleInsight(true)}
-                className="h-11 w-full border border-border bg-background text-foreground hover:border-primary/40 sm:w-auto"
+                variant="secondary"
+                className="h-11 w-full sm:w-auto"
               >
                 See a sample insight
               </Button>
@@ -321,7 +322,8 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={() => setShowSampleInsight(false)}
-                className="flex-1 border border-border bg-background text-foreground hover:border-primary/40"
+                variant="secondary"
+                className="flex-1"
               >
                 Close
               </Button>
