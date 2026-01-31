@@ -57,6 +57,10 @@ export interface OpikEvaluation {
     average: number;
   };
   reasoning?: string;
+  // Optional metadata for regression tracking
+  promptVersion?: string;
+  experimentId?: string;
+  experimentName?: string;
 }
 
 type OpikClient = InstanceType<typeof Opik>;
@@ -165,7 +169,19 @@ export async function logEvaluation(evaluation: OpikEvaluation): Promise<void> {
   // The TS SDK quickstart shows `trace(...)` logging. To keep this integration
   // minimal and non-invasive, we record evaluations as their own Opik trace.
   // We preserve the linkage by including `traceId` in the input/tags.
+  // We also include promptVersion, experimentId, experimentName for regression tracking.
   try {
+    const tags = ["pennywise-coach", "evaluation", evaluation.traceId];
+    if (evaluation.promptVersion) {
+      tags.push(`prompt:${evaluation.promptVersion}`);
+    }
+    if (evaluation.experimentId) {
+      tags.push(`experiment:${evaluation.experimentId}`);
+    }
+    if (evaluation.experimentName) {
+      tags.push(`experiment-name:${evaluation.experimentName}`);
+    }
+
     const opikEvalTrace = (client as any).trace?.({
       name: "evaluation",
       input: { traceId: evaluation.traceId },
@@ -177,8 +193,11 @@ export async function logEvaluation(evaluation: OpikEvaluation): Promise<void> {
         timestamp: new Date().toISOString(),
         score: evaluation.scores.average,
         safetyFlags: evaluation.scores.safetyFlags,
+        ...(evaluation.promptVersion && { promptVersion: evaluation.promptVersion }),
+        ...(evaluation.experimentId && { experimentId: evaluation.experimentId }),
+        ...(evaluation.experimentName && { experimentName: evaluation.experimentName }),
       },
-      tags: ["pennywise-coach", "evaluation", evaluation.traceId],
+      tags,
     });
 
     opikEvalTrace?.end?.();
