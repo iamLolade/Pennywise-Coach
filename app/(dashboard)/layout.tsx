@@ -24,6 +24,7 @@ export default function DashboardLayout({
     { href: "/dashboard", label: "Dashboard" },
     { href: "/coach", label: "Coach" },
     { href: "/insights", label: "Insights" },
+    { href: "/experiments", label: "Experiments" },
     { href: "/settings", label: "Settings" },
   ];
 
