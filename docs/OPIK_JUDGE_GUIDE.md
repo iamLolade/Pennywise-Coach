@@ -2,6 +2,8 @@
 
 This guide helps judges navigate the Opik dashboard to evaluate our "Best Use of Opik" submission.
 
+**Quick Navigation**: See [OPIK_QUICK_GUIDE.md](OPIK_QUICK_GUIDE.md) for a faster reference.
+
 ## Accessing the Opik Dashboard
 
 1. **Workspace URL**: `https://www.comet.com/opik/pennywise-coach/home`

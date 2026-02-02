@@ -1,5 +1,16 @@
 # Pennywise Coach - Hackathon Submission
 
+**Categories**: Best Use of Opik + Financial Health
+
+**Opik Dashboard**: [https://www.comet.com/opik/pennywise-coach/home](https://www.comet.com/opik/pennywise-coach/home)
+
+**Quick Links**:
+- [Demo Script](docs/DEMO_SCRIPT.md) - Step-by-step walkthrough
+- [Opik Quick Guide](docs/OPIK_QUICK_GUIDE.md) - Quick navigation reference
+- [Opik Judge Guide](docs/OPIK_JUDGE_GUIDE.md) - Detailed dashboard guide
+- [Experiment Results](docs/EXPERIMENT_RESULTS_SUMMARY.md) - v1 vs v3 comparison
+- [Screenshot Checklist](docs/SCREENSHOT_CHECKLIST.md) - Required screenshots
+
 ## Project Overview
 
 **Pennywise Coach** is an AI-powered financial health assistant designed to help people understand their spending patterns, build healthier money habits, and make confident financial decisions through calm, non-judgmental guidance. Unlike traditional financial apps that overwhelm users with charts and jargon, Pennywise Coach translates complex spending data into plain language insights and provides supportive, actionable coaching.
