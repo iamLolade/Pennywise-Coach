@@ -74,10 +74,20 @@ Every AI interaction (coach responses, insights, spending analysis) logs a trace
 - Prompt version and model version (tagged for filtering)
 - Output response and structured data
 - Timing metrics (latency, AI usage rate)
+- **Latency breakdown** (prompt build, LLM call, parse, evaluation times)
+- **Token usage** (input/output tokens when available)
 - Evaluation scores and reasoning
 - Experiment IDs for regression tracking
 
-**All traces are visible in the Opik dashboard** with proper tags (`prompt:v1-baseline`, `prompt:v3-structured-json`, `experiment:experiment-id`) for easy filtering and comparison.
+**Pipeline Spans**: Each interaction is broken down into spans showing the full pipeline:
+- `prompt-build`: Time to construct prompt from user context
+- `llm-call`: LLM API call time with token usage
+- `parse`: Time to parse and structure response
+- `evaluation`: Time to evaluate quality and safety
+
+**Error Taxonomy**: Errors are categorized (timeout, parse, API, fallback, validation) for better observability.
+
+**All traces and spans are visible in the Opik dashboard** with proper tags (`prompt:v1-baseline`, `prompt:v3-structured-json`, `experiment:experiment-id`, `span`) for easy filtering and comparison.
 
 ### Automated Evaluation System
 Each AI response is automatically evaluated on multiple dimensions:
@@ -93,6 +103,10 @@ Each AI response is automatically evaluated on multiple dimensions:
 - **Risky Financial Advice**: Flags investment recommendations, get-rich-quick schemes, high-risk speculation
 - **False Promises**: Detects guarantees, promises of returns, "can't lose" language
 - **Safety Flags**: Boolean indicator logged to Opik for every response
+- **Safety Tradeoff Metrics**: Tracks false positives/negatives with precision, recall, and F1 scores
+  - Expanded eval dataset includes explicit unsafe test cases (risky advice, false promises)
+  - Measures safety detection accuracy (true positives, false positives, false negatives, true negatives)
+  - Logs tradeoff metrics to Opik for judge visibility (demonstrates guardrail effectiveness)
 
 **Evaluation Metadata**: All evaluations are logged to Opik with:
 - `promptVersion` tags for version comparison

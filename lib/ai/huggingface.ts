@@ -110,10 +110,18 @@ function getErrorMessage(error: unknown): string {
   return "An unexpected error occurred. Please try again.";
 }
 
+export interface ChatCompletionResult {
+  content: string;
+  tokenUsage?: {
+    input: number;
+    output: number;
+  };
+}
+
 async function runChatCompletion(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   parameters: { max_new_tokens: number; temperature: number }
-): Promise<string> {
+): Promise<ChatCompletionResult> {
   const client = getHuggingFaceClient();
   const timeoutMs = 30000; // 30 seconds timeout
 
@@ -138,7 +146,33 @@ async function runChatCompletion(
       throw new Error("Received empty response from AI model");
     }
 
-    return content.trim();
+    // Extract token usage if available (HF API may include usage in response)
+    const tokenUsage = (result as any).usage
+      ? {
+        input: (result as any).usage.prompt_tokens || 0,
+        output: (result as any).usage.completion_tokens || 0,
+      }
+      : undefined;
+
+    // If usage not available, estimate from message lengths (rough approximation)
+    if (!tokenUsage) {
+      const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0) + content.length;
+      // Rough estimate: ~4 chars per token
+      const estimatedInput = Math.ceil(messages.reduce((sum, m) => sum + m.content.length, 0) / 4);
+      const estimatedOutput = Math.ceil(content.length / 4);
+      return {
+        content: content.trim(),
+        tokenUsage: {
+          input: estimatedInput,
+          output: estimatedOutput,
+        },
+      };
+    }
+
+    return {
+      content: content.trim(),
+      tokenUsage,
+    };
   } catch (error: any) {
     const friendlyMessage = getErrorMessage(error);
     console.error("Hugging Face SDK error:", {
@@ -160,9 +194,9 @@ export async function analyzeWithHuggingFace(
   userProfile: UserProfile,
   transactions: Transaction[],
   prompt: string
-): Promise<SpendingAnalysis> {
+): Promise<SpendingAnalysis & { tokenUsage?: { input: number; output: number } }> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -177,7 +211,11 @@ export async function analyzeWithHuggingFace(
     );
 
     // Parse the LLM response into SpendingAnalysis format
-    return parseLLMResponse(generatedText, transactions);
+    const analysis = parseLLMResponse(result.content, transactions);
+    return {
+      ...analysis,
+      ...(result.tokenUsage && { tokenUsage: result.tokenUsage }),
+    };
   } catch (error) {
     console.error("Hugging Face API error:", error);
     throw error;
@@ -200,7 +238,7 @@ export interface CoachResponseData {
  */
 export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -213,6 +251,8 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
         temperature: 0.7,
       }
     );
+
+    const generatedText = result.content;
 
     // Try to parse as JSON (for structured responses)
     try {
@@ -419,7 +459,7 @@ export interface InsightResponseData {
  */
 export async function generateInsight(prompt: string): Promise<InsightResponseData | string> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -432,6 +472,8 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
         temperature: 0.8,
       }
     );
+
+    const generatedText = result.content;
 
     // Try to parse as JSON (for structured responses)
     try {

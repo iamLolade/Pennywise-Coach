@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/huggingface";
 import { getInsightPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateInsight } from "@/lib/ai/evaluations";
-import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { generateTraceId, logTrace, logEvaluation, logSpan, categorizeError } from "@/lib/opik/client";
 import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import {
   calculateTotalIncome,
@@ -82,9 +82,29 @@ export async function POST(request: NextRequest) {
     let evaluationScore: number | undefined;
 
     try {
+      // Span 2: LLM Call
+      const llmCallStart = Date.now();
       const aiResponse = await generateInsight(prompt);
+      llmCallLatency = Date.now() - llmCallStart;
       usedAI = true;
-
+      
+      // Extract token usage if available
+      if (typeof aiResponse === "object" && "tokenUsage" in aiResponse) {
+        tokenUsage = (aiResponse as any).tokenUsage;
+      }
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          ...(tokenUsage && { tokenUsage }),
+        },
+      });
+      
+      // Span 3: Parse
+      const parseStart = Date.now();
+      
       // Handle structured response or plain text
       if (typeof aiResponse === "object" && "title" in aiResponse && "content" in aiResponse) {
         // Structured response
@@ -98,11 +118,34 @@ export async function POST(request: NextRequest) {
           suggestedAction: lines[lines.length - 1]?.replace(/^[-*]\s*/, "").trim() || "Keep tracking your spending to build better habits.",
         };
       }
+      
+      parseLatency = Date.now() - parseStart;
+      
+      await logSpan({
+        spanName: "parse",
+        parentTraceId: traceId,
+        metadata: {
+          latency: parseLatency,
+          isStructured: typeof aiResponse === "object" && "title" in aiResponse,
+        },
+      });
 
-      // Evaluate the insight
+      // Span 4: Evaluation
+      const evalStart = Date.now();
       try {
         const evaluation = evaluateInsight(insight, userProfile, type);
         evaluationScore = evaluation.average;
+        const evalLatency = Date.now() - evalStart;
+        
+        await logSpan({
+          spanName: "evaluation",
+          parentTraceId: traceId,
+          metadata: {
+            latency: evalLatency,
+            averageScore: evaluation.average,
+            safetyFlags: evaluation.safetyFlags,
+          },
+        });
 
         // Log evaluation to Opik with promptVersion for regression tracking
         // Map insight scores to OpikEvaluation format (relevance -> helpfulness, actionability -> financialAlignment)
@@ -154,7 +197,21 @@ export async function POST(request: NextRequest) {
         // Continue without evaluation
       }
     } catch (error) {
+      const errorCategory = categorizeError(error);
       console.warn("AI insight generation failed, using fallback:", error);
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          error: {
+            category: errorCategory,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+      });
+      
       // Fallback to rule-based insight
       insight = generateFallbackInsight(userProfile, transactions, type);
     }
@@ -179,6 +236,13 @@ export async function POST(request: NextRequest) {
         usedAI,
         type,
         ...(evaluationScore !== undefined && { evaluationScore }),
+        latencyBreakdown: {
+          promptBuild: promptBuildLatency,
+          llmCall: llmCallLatency,
+          parse: parseLatency,
+          evaluation: evaluationScore !== undefined ? Date.now() - (Date.now() - latency + promptBuildLatency + llmCallLatency + parseLatency) : undefined,
+        },
+        ...(tokenUsage && { tokenUsage }),
       },
     });
 

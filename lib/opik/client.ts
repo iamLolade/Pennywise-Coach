@@ -237,3 +237,93 @@ export async function createExperiment(
 export function generateTraceId(): string {
   return `trace-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
+
+/**
+ * Error taxonomy for categorizing errors in traces
+ */
+export type ErrorCategory =
+  | "timeout" // Request timed out
+  | "parse" // Failed to parse LLM response
+  | "api" // API error (auth, rate limit, etc.)
+  | "fallback" // Fallback to rule-based response
+  | "validation" // Input validation error
+  | "unknown"; // Unknown error
+
+/**
+ * Categorize an error for observability
+ */
+export function categorizeError(error: unknown): ErrorCategory {
+  if (!(error instanceof Error)) return "unknown";
+  
+  const msg = error.message.toLowerCase();
+  
+  if (msg.includes("timeout") || msg.includes("timed out")) return "timeout";
+  if (msg.includes("parse") || msg.includes("json") || msg.includes("invalid")) return "parse";
+  if (msg.includes("api") || msg.includes("authentication") || msg.includes("rate limit") || msg.includes("404") || msg.includes("400")) return "api";
+  if (msg.includes("fallback")) return "fallback";
+  if (msg.includes("validation") || msg.includes("missing") || msg.includes("required")) return "validation";
+  
+  return "unknown";
+}
+
+/**
+ * Log a span (child trace) to Opik
+ * 
+ * Spans represent sub-operations within a larger trace (e.g., "prompt-build", "llm-call", "parse", "evaluation").
+ * They are linked to the parent trace via parentTraceId.
+ */
+export interface OpikSpan {
+  spanName: string; // e.g., "prompt-build", "llm-call", "parse", "evaluation"
+  parentTraceId: string; // Links to the parent trace
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  metadata?: {
+    latency?: number; // Duration of this span in ms
+    tokenUsage?: {
+      input: number;
+      output: number;
+    };
+    error?: {
+      category: ErrorCategory;
+      message: string;
+    };
+    [key: string]: unknown;
+  };
+}
+
+export async function logSpan(span: OpikSpan): Promise<void> {
+  const client = getOpikClient();
+  if (!client) {
+    console.log("[Opik Span - skipped (missing OPIK_API_KEY)]", {
+      spanName: span.spanName,
+      parentTraceId: span.parentTraceId,
+    });
+    return;
+  }
+
+  try {
+    const opikSpan = (client as any).trace?.({
+      name: span.spanName,
+      input: {
+        parentTraceId: span.parentTraceId,
+        ...(span.input || {}),
+      },
+      output: span.output || {},
+      metadata: {
+        timestamp: new Date().toISOString(),
+        ...(span.metadata || {}),
+      },
+      tags: [
+        "pennywise-coach",
+        "span",
+        span.spanName,
+        `parent:${span.parentTraceId}`,
+      ],
+    });
+
+    opikSpan?.end?.();
+    await flushIfHelpful(client);
+  } catch (e) {
+    console.warn("[Opik] logSpan failed:", e);
+  }
+}

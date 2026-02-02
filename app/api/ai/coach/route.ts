@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build prompt with improved structure
+    // Span 1: Prompt Build
+    const promptBuildStart = Date.now();
     const prompt = getCoachPrompt(
       promptVersion,
       userProfile,
@@ -78,15 +79,47 @@ export async function POST(request: NextRequest) {
       contextSummary || undefined,
       recentTransactions
     );
+    const promptBuildLatency = Date.now() - promptBuildStart;
+    await logSpan({
+      spanName: "prompt-build",
+      parentTraceId: traceId,
+      metadata: {
+        latency: promptBuildLatency,
+        promptLength: prompt.length,
+      },
+    });
 
     // Try AI response first, fallback to rule-based if it fails
     let response: string;
     let responseData: CoachResponseData | null = null;
     let usedAI = false;
+    let tokenUsage: { input: number; output: number } | undefined;
+    let llmCallLatency = 0;
+    let parseLatency = 0;
 
     try {
+      // Span 2: LLM Call
+      const llmCallStart = Date.now();
       const aiResponse = await getCoachResponse(prompt);
+      llmCallLatency = Date.now() - llmCallStart;
       usedAI = true;
+      
+      // Extract token usage if available (from result object if it has tokenUsage)
+      if (typeof aiResponse === "object" && "tokenUsage" in aiResponse) {
+        tokenUsage = (aiResponse as any).tokenUsage;
+      }
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          ...(tokenUsage && { tokenUsage }),
+        },
+      });
+      
+      // Span 3: Parse
+      const parseStart = Date.now();
 
       // Handle structured response
       if (typeof aiResponse === "object" && "response" in aiResponse) {
@@ -96,18 +129,54 @@ export async function POST(request: NextRequest) {
         // Plain text response
         response = typeof aiResponse === "string" ? aiResponse : String(aiResponse);
       }
+      parseLatency = Date.now() - parseStart;
+      
+      await logSpan({
+        spanName: "parse",
+        parentTraceId: traceId,
+        metadata: {
+          latency: parseLatency,
+          isStructured: !!responseData,
+        },
+      });
     } catch (error) {
+      const errorCategory = categorizeError(error);
       console.warn("AI coach response failed, using fallback:", error);
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          error: {
+            category: errorCategory,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+      });
+      
       // Fallback to rule-based response
       response = generateFallbackCoachResponse(userProfile, currentQuestion);
     }
 
-    // Evaluate the response quality
+    // Span 4: Evaluation
+    const evalStart = Date.now();
     const evaluation = evaluateCoachResponse(
       response,
       currentQuestion,
       userProfile
     );
+    const evalLatency = Date.now() - evalStart;
+    
+    await logSpan({
+      spanName: "evaluation",
+      parentTraceId: traceId,
+      metadata: {
+        latency: evalLatency,
+        averageScore: evaluation.average,
+        safetyFlags: evaluation.safetyFlags,
+      },
+    });
 
     // Log trace to Opik
     const latency = Date.now() - startTime;
@@ -130,6 +199,13 @@ export async function POST(request: NextRequest) {
         latency,
         usedAI,
         evaluationScore: evaluation.average,
+        latencyBreakdown: {
+          promptBuild: promptBuildLatency,
+          llmCall: llmCallLatency,
+          parse: parseLatency,
+          evaluation: evalLatency,
+        },
+        ...(tokenUsage && { tokenUsage }),
       },
     });
 
