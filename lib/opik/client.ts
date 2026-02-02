@@ -19,7 +19,7 @@ export interface OpikTrace {
   promptVersion: string;
   modelVersion?: string;
   input: {
-    userProfile: unknown;
+    userProfile?: unknown; // Optional for experiment comparisons
     transactions?: unknown;
     userQuestion?: string;
     conversationHistory?: unknown;
