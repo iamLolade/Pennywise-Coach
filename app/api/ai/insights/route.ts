@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         const evaluation = evaluateInsight(insight, userProfile, type);
         evaluationScore = evaluation.average;
 
-        // Log evaluation to Opik
+        // Log evaluation to Opik with promptVersion for regression tracking
         // Map insight scores to OpikEvaluation format (relevance -> helpfulness, actionability -> financialAlignment)
         await logEvaluation({
           traceId,
@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
             average: evaluation.average,
           },
           reasoning: evaluation.reasoning,
+          promptVersion,
         });
       } catch (evalError) {
         console.warn("Failed to evaluate insight:", evalError);

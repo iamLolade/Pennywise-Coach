@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Log evaluation to Opik
+    // Log evaluation to Opik with promptVersion for regression tracking
     await logEvaluation({
       traceId,
       scores: {
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
         average: evaluation.average,
       },
       reasoning: evaluation.reasoning,
+      promptVersion,
     });
 
     return NextResponse.json({

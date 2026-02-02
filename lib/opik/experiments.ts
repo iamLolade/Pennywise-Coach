@@ -161,7 +161,7 @@ export async function runExperiment(
         },
       });
 
-      // Log evaluation
+      // Log evaluation with metadata for regression tracking
       await logEvaluation({
         traceId,
         scores: {
@@ -173,6 +173,9 @@ export async function runExperiment(
           average: evaluation.average,
         },
         reasoning: evaluation.reasoning,
+        promptVersion,
+        experimentId,
+        experimentName,
       });
 
       results.push({
@@ -292,6 +295,17 @@ export interface ExperimentComparison {
   safetyImprovement: number; // Reduction in safety flags
   latencyChange: number; // Difference in average latency
   aiUsageChange: number; // Difference in AI usage rate
+  regressions: {
+    // Metrics that got worse (negative improvements)
+    clarity: boolean;
+    helpfulness: boolean;
+    tone: boolean;
+    financialAlignment: boolean;
+    average: boolean;
+    safety: boolean; // true if safety flags increased
+  };
+  regressionCount: number; // Total number of regressions
+  overallImprovement: boolean; // true if average improved and no critical regressions
 }
 
 export function compareExperiments(
@@ -301,18 +315,41 @@ export function compareExperiments(
   const summary1 = experiment1.summary!;
   const summary2 = experiment2.summary!;
 
+  const improvements = {
+    clarity: summary2.averageScores.clarity - summary1.averageScores.clarity,
+    helpfulness: summary2.averageScores.helpfulness - summary1.averageScores.helpfulness,
+    tone: summary2.averageScores.tone - summary1.averageScores.tone,
+    financialAlignment: summary2.averageScores.financialAlignment - summary1.averageScores.financialAlignment,
+    average: summary2.averageScores.average - summary1.averageScores.average,
+  };
+
+  const safetyImprovement = summary1.safetyFlagsCount - summary2.safetyFlagsCount;
+
+  // Detect regressions (negative improvements or safety flag increases)
+  const regressions = {
+    clarity: improvements.clarity < -0.5, // Significant regression threshold
+    helpfulness: improvements.helpfulness < -0.5,
+    tone: improvements.tone < -0.5,
+    financialAlignment: improvements.financialAlignment < -0.5,
+    average: improvements.average < -0.5,
+    safety: safetyImprovement < 0, // Safety flags increased
+  };
+
+  const regressionCount = Object.values(regressions).filter(Boolean).length;
+
+  // Overall improvement: average improved AND no critical regressions (safety or average)
+  const overallImprovement =
+    improvements.average > 0 && !regressions.safety && !regressions.average;
+
   return {
     experiment1,
     experiment2,
-    improvements: {
-      clarity: summary2.averageScores.clarity - summary1.averageScores.clarity,
-      helpfulness: summary2.averageScores.helpfulness - summary1.averageScores.helpfulness,
-      tone: summary2.averageScores.tone - summary1.averageScores.tone,
-      financialAlignment: summary2.averageScores.financialAlignment - summary1.averageScores.financialAlignment,
-      average: summary2.averageScores.average - summary1.averageScores.average,
-    },
-    safetyImprovement: summary1.safetyFlagsCount - summary2.safetyFlagsCount,
+    improvements,
+    safetyImprovement,
     latencyChange: summary2.averageLatency - summary1.averageLatency,
     aiUsageChange: summary2.aiUsageRate - summary1.aiUsageRate,
+    regressions,
+    regressionCount,
+    overallImprovement,
   };
 }
