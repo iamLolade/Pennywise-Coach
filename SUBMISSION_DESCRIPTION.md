@@ -98,6 +98,7 @@ Each AI response is automatically evaluated on multiple dimensions:
 - `promptVersion` tags for version comparison
 - `experimentId` tags for experiment tracking
 - `experimentName` tags for experiment organization
+- `evaluator` tags (`heuristic` vs `llm_judge`) to compare scoring methods
 - Detailed reasoning for each score
 
 ### Experiment System

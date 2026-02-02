@@ -61,6 +61,7 @@ export interface OpikEvaluation {
   promptVersion?: string;
   experimentId?: string;
   experimentName?: string;
+  evaluator?: "heuristic" | "llm_judge";
 }
 
 type OpikClient = InstanceType<typeof Opik>;
@@ -172,6 +173,9 @@ export async function logEvaluation(evaluation: OpikEvaluation): Promise<void> {
   // We also include promptVersion, experimentId, experimentName for regression tracking.
   try {
     const tags = ["pennywise-coach", "evaluation", evaluation.traceId];
+    if (evaluation.evaluator) {
+      tags.push(`evaluator:${evaluation.evaluator}`);
+    }
     if (evaluation.promptVersion) {
       tags.push(`prompt:${evaluation.promptVersion}`);
     }
@@ -196,6 +200,7 @@ export async function logEvaluation(evaluation: OpikEvaluation): Promise<void> {
         ...(evaluation.promptVersion && { promptVersion: evaluation.promptVersion }),
         ...(evaluation.experimentId && { experimentId: evaluation.experimentId }),
         ...(evaluation.experimentName && { experimentName: evaluation.experimentName }),
+        ...(evaluation.evaluator && { evaluator: evaluation.evaluator }),
       },
       tags,
     });

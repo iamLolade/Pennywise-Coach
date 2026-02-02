@@ -34,6 +34,8 @@ This guide helps judges navigate the Opik dashboard to evaluate our "Best Use of
 - `prompt:v3-structured-json` - Improved prompt version
 - `experiment:experiment-id-here` - Specific experiment run
 - `evaluation` - All evaluation traces
+- `evaluator:heuristic` - Heuristic evaluator (fast, rule-based)
+- `evaluator:llm_judge` - LLM-as-judge evaluator (online judge)
 
 ### 2. Evaluation Scores
 
@@ -53,6 +55,11 @@ Each evaluation trace contains:
 1. Filter by `prompt:v1-baseline` to see baseline scores
 2. Filter by `prompt:v3-structured-json` to see improved scores
 3. Compare average scores - v3 should show improvement
+
+**How to Compare Evaluators**:
+1. Filter by `evaluator:heuristic` to see rule-based scoring
+2. Filter by `evaluator:llm_judge` to see online LLM-as-judge scoring
+3. Compare score distributions and review judge reasoning text
 
 ### 3. Experiment Management
 

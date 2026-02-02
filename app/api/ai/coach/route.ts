@@ -8,6 +8,7 @@ import {
 import { getCoachPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateCoachResponse } from "@/lib/ai/evaluations";
 import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getTransactions } from "@/lib/supabase/transactions";
 import type { UserProfile } from "@/types";
 
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Log evaluation to Opik with promptVersion for regression tracking
+    // Log heuristic evaluation to Opik
     await logEvaluation({
       traceId,
       scores: {
@@ -145,7 +146,37 @@ export async function POST(request: NextRequest) {
       },
       reasoning: evaluation.reasoning,
       promptVersion,
+      evaluator: "heuristic",
     });
+
+    // Optional online LLM-as-judge evaluation (hackathon / demo mode)
+    if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+      const judge = await runLlmJudgeEvaluation({
+        userQuestion: currentQuestion,
+        aiResponse: response,
+        userProfile: {
+          goals: userProfile.goals || [],
+          concerns: userProfile.concerns || [],
+        },
+      });
+
+      if (judge) {
+        await logEvaluation({
+          traceId,
+          scores: {
+            clarity: judge.raw.clarity * 2,
+            helpfulness: judge.raw.helpfulness * 2,
+            tone: judge.raw.tone * 2,
+            financialAlignment: judge.raw.financialAlignment * 2,
+            safetyFlags: judge.raw.safetyFlags,
+            average: judge.average0to10,
+          },
+          reasoning: judge.raw.reasoning,
+          promptVersion,
+          evaluator: "llm_judge",
+        });
+      }
+    }
 
     return NextResponse.json({
       response,

@@ -8,6 +8,7 @@ import {
 import { getInsightPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateInsight } from "@/lib/ai/evaluations";
 import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import {
   calculateTotalIncome,
   calculateTotalExpenses,
@@ -117,7 +118,37 @@ export async function POST(request: NextRequest) {
           },
           reasoning: evaluation.reasoning,
           promptVersion,
+          evaluator: "heuristic",
         });
+
+        // Optional online LLM-as-judge evaluation (hackathon / demo mode)
+        if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+          const judge = await runLlmJudgeEvaluation({
+            userQuestion: `Generate a ${type} insight`,
+            aiResponse: `${insight.title}\n${insight.content}\nSuggested action: ${insight.suggestedAction}`,
+            userProfile: {
+              goals: userProfile.goals || [],
+              concerns: userProfile.concerns || [],
+            },
+          });
+
+          if (judge) {
+            await logEvaluation({
+              traceId,
+              scores: {
+                clarity: judge.raw.clarity * 2,
+                helpfulness: judge.raw.helpfulness * 2,
+                tone: judge.raw.tone * 2,
+                financialAlignment: judge.raw.financialAlignment * 2,
+                safetyFlags: judge.raw.safetyFlags,
+                average: judge.average0to10,
+              },
+              reasoning: judge.raw.reasoning,
+              promptVersion,
+              evaluator: "llm_judge",
+            });
+          }
+        }
       } catch (evalError) {
         console.warn("Failed to evaluate insight:", evalError);
         // Continue without evaluation

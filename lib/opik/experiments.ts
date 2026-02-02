@@ -8,6 +8,7 @@ import { EVAL_DATASET, type EvalScenario } from "@/lib/data/evalDataset";
 import { PROMPT_VERSIONS, type PromptVersion } from "@/lib/ai/prompts";
 import { generateTraceId, logTrace, logEvaluation, createExperiment } from "./client";
 import { evaluateCoachResponse } from "@/lib/ai/evaluations";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getCoachResponse } from "@/lib/ai/huggingface";
 import { getCoachPrompt } from "@/lib/ai/prompts";
 
@@ -161,7 +162,7 @@ export async function runExperiment(
         },
       });
 
-      // Log evaluation with metadata for regression tracking
+      // Log heuristic evaluation with metadata for regression tracking
       await logEvaluation({
         traceId,
         scores: {
@@ -176,7 +177,39 @@ export async function runExperiment(
         promptVersion,
         experimentId,
         experimentName,
+        evaluator: "heuristic",
       });
+
+      // Optional LLM-as-judge evaluation (recommended for hackathon scoring)
+      if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+        const judge = await runLlmJudgeEvaluation({
+          userQuestion: scenario.userQuestion,
+          aiResponse: response,
+          userProfile: {
+            goals: scenario.userProfile.goals,
+            concerns: scenario.userProfile.concerns,
+          },
+        });
+
+        if (judge) {
+          await logEvaluation({
+            traceId,
+            scores: {
+              clarity: judge.raw.clarity * 2,
+              helpfulness: judge.raw.helpfulness * 2,
+              tone: judge.raw.tone * 2,
+              financialAlignment: judge.raw.financialAlignment * 2,
+              safetyFlags: judge.raw.safetyFlags,
+              average: judge.average0to10,
+            },
+            reasoning: judge.raw.reasoning,
+            promptVersion,
+            experimentId,
+            experimentName,
+            evaluator: "llm_judge",
+          });
+        }
+      }
 
       results.push({
         scenarioId: scenario.id,
