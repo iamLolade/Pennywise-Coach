@@ -65,6 +65,15 @@ export interface ExperimentSummary {
   safetyFlagsCount: number;
   averageLatency: number;
   aiUsageRate: number; // Percentage of scenarios that used AI vs fallback
+  safetyMetrics?: {
+    truePositives: number;
+    falsePositives: number;
+    falseNegatives: number;
+    trueNegatives: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+  };
 }
 
 /**

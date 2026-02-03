@@ -64,7 +64,18 @@ export async function POST(request: NextRequest) {
         }).slice(-10)
       : transactions.slice(-20); // Last 20 for weekly
 
-    // Build prompt
+    // Try AI generation first, fallback to rule-based if it fails
+    let insight: { title: string; content: string; suggestedAction: string };
+    let usedAI = false;
+    let evaluationScore: number | undefined;
+    let tokenUsage: { input: number; output: number } | undefined;
+    let llmCallLatency = 0;
+    let parseLatency = 0;
+    let promptBuildLatency = 0;
+    let evalLatency = 0;
+
+    // Span 1: Prompt Build
+    const promptBuildStart = Date.now();
     const prompt = getInsightPrompt(
       promptVersion,
       userProfile,
@@ -75,11 +86,15 @@ export async function POST(request: NextRequest) {
       })),
       summary
     );
-
-    // Try AI generation first, fallback to rule-based if it fails
-    let insight: { title: string; content: string; suggestedAction: string };
-    let usedAI = false;
-    let evaluationScore: number | undefined;
+    promptBuildLatency = Date.now() - promptBuildStart;
+    await logSpan({
+      spanName: "prompt-build",
+      parentTraceId: traceId,
+      metadata: {
+        latency: promptBuildLatency,
+        promptLength: prompt.length,
+      },
+    });
 
     try {
       // Span 2: LLM Call
@@ -135,7 +150,7 @@ export async function POST(request: NextRequest) {
       try {
         const evaluation = evaluateInsight(insight, userProfile, type);
         evaluationScore = evaluation.average;
-        const evalLatency = Date.now() - evalStart;
+        evalLatency = Date.now() - evalStart;
         
         await logSpan({
           spanName: "evaluation",
@@ -240,7 +255,7 @@ export async function POST(request: NextRequest) {
           promptBuild: promptBuildLatency,
           llmCall: llmCallLatency,
           parse: parseLatency,
-          evaluation: evaluationScore !== undefined ? Date.now() - (Date.now() - latency + promptBuildLatency + llmCallLatency + parseLatency) : undefined,
+          evaluation: evalLatency,
         },
         ...(tokenUsage && { tokenUsage }),
       },

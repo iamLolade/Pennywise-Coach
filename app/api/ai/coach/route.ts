@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/huggingface";
 import { getCoachPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateCoachResponse } from "@/lib/ai/evaluations";
-import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { generateTraceId, logTrace, logEvaluation, logSpan, categorizeError } from "@/lib/opik/client";
 import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getTransactions } from "@/lib/supabase/transactions";
 import type { UserProfile } from "@/types";
