@@ -54,8 +54,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Error running experiment:", error);
+    const message = error instanceof Error ? error.message : "Failed to run experiment";
     return NextResponse.json(
-      { error: error.message || "Failed to run experiment" },
+      { error: message },
       { status: 500 }
     );
   }

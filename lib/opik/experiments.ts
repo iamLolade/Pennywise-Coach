@@ -281,6 +281,7 @@ export async function runExperiment(
       console.log(`[Opik Experiment] Completed scenario ${scenario.id}: avg score ${evaluation.average.toFixed(1)}`);
     } catch (err: unknown) {
       console.error(`[Opik Experiment] Failed scenario ${scenario.id}:`, err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       results.push({
         scenarioId: scenario.id,
         scenarioName: scenario.name,
@@ -292,11 +293,11 @@ export async function runExperiment(
           financialAlignment: 0,
           safetyFlags: true,
           average: 0,
-          reasoning: `Error: ${err.message || "Unknown error"}`,
+          reasoning: `Error: ${errorMessage}`,
         },
         latency: 0,
         usedAI: false,
-        error: err.message || "Unknown error",
+        error: errorMessage,
       });
     }
   }
