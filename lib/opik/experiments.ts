@@ -228,7 +228,7 @@ export async function runExperiment(
         evaluator: "heuristic",
       });
 
-      // Optional LLM-as-judge evaluation (recommended for hackathon scoring)
+      // Optional LLM-as-judge evaluation (provides additional evaluation metrics)
       if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
         const judge = await runLlmJudgeEvaluation({
           userQuestion: scenario.userQuestion,

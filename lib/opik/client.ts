@@ -98,7 +98,7 @@ function getOpikClient(): OpikClient | null {
 }
 
 async function flushIfHelpful(client: OpikClient): Promise<void> {
-  // Opik batches traces in production by default. During local dev / hackathon demos,
+  // Opik batches traces in production by default. During local development,
   // flushing makes traces show up immediately.
   if (process.env.NODE_ENV === "production") return;
   try {

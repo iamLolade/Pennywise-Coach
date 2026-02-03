@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
       evaluator: "heuristic",
     });
 
-    // Optional online LLM-as-judge evaluation (hackathon / demo mode)
+    // Optional online LLM-as-judge evaluation (enabled via OPIK_LLM_JUDGE_ENABLED)
     if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
       const judge = await runLlmJudgeEvaluation({
         userQuestion: currentQuestion,
