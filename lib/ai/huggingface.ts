@@ -173,7 +173,7 @@ async function runChatCompletion(
       content: content.trim(),
       tokenUsage,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     const friendlyMessage = getErrorMessage(error);
     console.error("Hugging Face SDK error:", {
       model: HF_MODEL_ID,

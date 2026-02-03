@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       comparison,
       traceId, // Return traceId so user can find it in Opik
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error comparing experiments:", error);
     return NextResponse.json(
       { error: error.message || "Failed to compare experiments" },

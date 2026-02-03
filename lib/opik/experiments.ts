@@ -137,8 +137,8 @@ export async function runExperiment(
         } else {
           response = aiResponse as string;
         }
-      } catch (err: any) {
-        error = err.message || "AI generation failed";
+      } catch (err: unknown) {
+        error = err instanceof Error ? err.message : "AI generation failed";
         // Use a simple fallback for evaluation
         response = `I understand you're asking about ${scenario.userQuestion}. Let me help you with that.`;
       }
@@ -279,7 +279,7 @@ export async function runExperiment(
       });
 
       console.log(`[Opik Experiment] Completed scenario ${scenario.id}: avg score ${evaluation.average.toFixed(1)}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[Opik Experiment] Failed scenario ${scenario.id}:`, err);
       results.push({
         scenarioId: scenario.id,
