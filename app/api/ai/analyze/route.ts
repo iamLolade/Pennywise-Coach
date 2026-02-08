@@ -79,8 +79,16 @@ export async function POST(request: NextRequest) {
       analysis.totalIncome = totalIncome;
       analysis.totalSpent = totalSpent;
       analysis.byCategory = byCategory;
-    } catch (error) {
-      console.warn("AI analysis failed, using fallback:", error);
+    } catch (error: unknown) {
+      // Fallback to rule-based analysis (expected behavior when LLM fails)
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("Could not find JSON") || errorMessage.includes("parse")) {
+        // Expected: LLM didn't return valid JSON, fallback is fine
+        console.log("Using fallback analysis (LLM response format issue)");
+      } else {
+        // Unexpected error, log as warning
+        console.warn("AI analysis failed, using fallback:", errorMessage);
+      }
       // Fallback to rule-based analysis
       analysis = generateFallbackAnalysis(userProfile, transactions);
       analysis.totalIncome = totalIncome;

@@ -222,8 +222,9 @@ export async function analyzeWithHuggingFace(
       ...analysis,
       ...(result.tokenUsage && { tokenUsage: result.tokenUsage }),
     };
-  } catch (error) {
-    console.error("Hugging Face API error:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Hugging Face API error:", errorMessage);
     throw error;
   }
 }
@@ -288,8 +289,9 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
 
     // Fallback to plain text
     return generatedText.trim();
-  } catch (error) {
-    console.error("Hugging Face API error:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Hugging Face API error:", errorMessage);
     throw error;
   }
 }
@@ -332,7 +334,6 @@ function parseLLMResponse(
   }
 
   if (!jsonMatch) {
-    console.warn("Could not find JSON in LLM response, attempting to parse entire response");
     // Last resort: try parsing the entire cleaned text
     try {
       const parsed = JSON.parse(cleanedText);
@@ -345,6 +346,11 @@ function parseLLMResponse(
   }
 
   if (!jsonMatch) {
+    // Log the actual response for debugging (first 200 chars only to avoid spam)
+    const preview = responseText.substring(0, 200);
+    console.warn(
+      `Could not find JSON in LLM response. Preview: ${preview}${responseText.length > 200 ? "..." : ""}`
+    );
     throw new Error("Could not find JSON in LLM response");
   }
 
@@ -364,10 +370,14 @@ function parseLLMResponse(
     };
 
     return analysis;
-  } catch (error) {
-    console.error("Failed to parse LLM response:", error);
-    console.error("Response text:", responseText);
-    console.error("Extracted JSON:", jsonMatch[0]);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown parse error";
+    // Log preview only (first 200 chars) to avoid spam
+    const responsePreview = responseText.substring(0, 200);
+    const jsonPreview = jsonMatch[0]?.substring(0, 200) || "N/A";
+    console.warn(
+      `Failed to parse LLM response: ${errorMessage}. Response preview: ${responsePreview}${responseText.length > 200 ? "..." : ""}. JSON preview: ${jsonPreview}${jsonMatch[0]?.length > 200 ? "..." : ""}`
+    );
     throw new Error("Failed to parse LLM response as valid JSON");
   }
 }
@@ -515,7 +525,7 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
 
     // Fallback to plain text
     return generatedText.trim();
-  } catch (error) {
+  } catch (error: unknown) {
     // Error already logged in runChatCompletion
     throw error;
   }
