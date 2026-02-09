@@ -10,6 +10,7 @@ import { evaluateCoachResponse } from "@/lib/ai/evaluations";
 import { generateTraceId, logTrace, logEvaluation, logSpan, categorizeError } from "@/lib/opik/client";
 import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getTransactions } from "@/lib/supabase/transactions";
+import { buildGroundedAnswer, questionNeedsTransactions } from "@/lib/ai/grounding";
 import type { UserProfile } from "@/types";
 
 /**
@@ -40,6 +41,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If the user is asking for factual account data (salary range, last expense, etc),
+    // answer deterministically from stored data to avoid hallucinations.
+    const needsTransactions = includeTransactions || questionNeedsTransactions(currentQuestion);
+
     // Optionally fetch recent transactions for context
     let recentTransactions: Array<{
       amount: number;
@@ -48,7 +53,7 @@ export async function POST(request: NextRequest) {
       description: string;
     }> | undefined;
     
-    if (includeTransactions) {
+    if (needsTransactions) {
       try {
         const allTransactions = await getTransactions();
         // Get last 7 days of transactions
@@ -63,6 +68,68 @@ export async function POST(request: NextRequest) {
             date: t.date,
             description: t.description,
           }));
+
+        const grounded = buildGroundedAnswer({
+          question: currentQuestion,
+          userProfile,
+          transactions: allTransactions,
+        });
+
+        if (grounded) {
+          const response = grounded.response;
+
+          // Evaluate + log as a non-LLM response (still useful for Opik + regressions)
+          const evaluation = evaluateCoachResponse(response, currentQuestion, userProfile);
+          const latency = Date.now() - startTime;
+
+          await logTrace({
+            traceId,
+            experimentName: "coach-chat",
+            promptVersion,
+            input: {
+              userProfile,
+              conversationHistory: conversationHistory || [],
+              currentQuestion,
+              transactions: recentTransactions,
+            },
+            output: {
+              response,
+              structuredData: null,
+            },
+            metadata: {
+              timestamp: new Date().toISOString(),
+              latency,
+              usedAI: false,
+              groundedKind: grounded.kind,
+              evaluationScore: evaluation.average,
+            },
+          });
+
+          await logEvaluation({
+            traceId,
+            scores: {
+              clarity: evaluation.clarity,
+              helpfulness: evaluation.helpfulness,
+              tone: evaluation.tone,
+              financialAlignment: evaluation.financialAlignment,
+              safetyFlags: evaluation.safetyFlags,
+              average: evaluation.average,
+            },
+            reasoning: evaluation.reasoning,
+            promptVersion,
+            evaluator: "heuristic",
+          });
+
+          return NextResponse.json({
+            response,
+            traceId,
+            promptVersion,
+            evaluation: {
+              average: evaluation.average,
+              safetyFlags: evaluation.safetyFlags,
+            },
+          });
+        }
       } catch (error) {
         console.warn("Failed to fetch transactions for coach context:", error);
         // Continue without transactions
