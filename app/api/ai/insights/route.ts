@@ -13,6 +13,7 @@ import {
   calculateTotalIncome,
   calculateTotalExpenses,
 } from "@/lib/utils/transactions";
+import { formatMoney } from "@/lib/utils/money";
 import type { Transaction, UserProfile } from "@/types";
 
 /**
@@ -52,7 +53,14 @@ export async function POST(request: NextRequest) {
     const totalIncome = calculateTotalIncome(transactions);
     const totalSpent = calculateTotalExpenses(transactions);
     const net = totalIncome - totalSpent;
-    const summary = `${transactions.length} transactions, $${Math.round(totalIncome)} income, $${Math.round(totalSpent)} spent, $${Math.round(net)} net.`;
+    const currency = userProfile.currency || "USD";
+    const summary = `${transactions.length} transactions, ${formatMoney(
+      totalIncome,
+      currency
+    )} income, ${formatMoney(totalSpent, currency)} spent, ${formatMoney(
+      net,
+      currency
+    )} net.`;
 
     // Get recent transactions based on type
     const recentTransactions = type === "daily" 

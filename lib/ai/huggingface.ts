@@ -389,6 +389,8 @@ export function generateFallbackAnalysis(
   userProfile: UserProfile,
   transactions: Transaction[]
 ): SpendingAnalysis {
+  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
+  const currency = userProfile.currency || "USD";
   const totalIncome = transactions
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -412,11 +414,11 @@ export function generateFallbackAnalysis(
   // Add patterns
   if (net > 0) {
     patterns.push(
-      `You're saving $${Math.round(net)} this period, which is great progress!`
+      `You're saving ${formatMoney(net, currency)} this period, which is great progress!`
     );
   } else {
     patterns.push(
-      `You're spending $${Math.abs(Math.round(net))} more than you're earning.`
+      `You're spending ${formatMoney(Math.abs(net), currency)} more than you're earning.`
     );
   }
 
@@ -434,11 +436,11 @@ export function generateFallbackAnalysis(
   if (userProfile.goals.includes("build-emergency-fund")) {
     if (net > 0) {
       suggestions.push(
-        `You're saving $${Math.round(net)} per period. Consider setting aside $${Math.round(net * 0.5)} for your emergency fund.`
+        `You're saving ${formatMoney(net, currency)} per period. Consider setting aside ${formatMoney(net * 0.5, currency)} for your emergency fund.`
       );
     } else {
       suggestions.push(
-        `To build an emergency fund, try to reduce expenses by $${Math.abs(Math.round(net)) + 100} per period.`
+        `To build an emergency fund, try to reduce expenses by about ${formatMoney(Math.abs(net) + 100, currency)} per period.`
       );
     }
   }
@@ -455,7 +457,7 @@ export function generateFallbackAnalysis(
     byCategory,
     patterns,
     anomalies: [],
-    summary: `Based on your ${transactions.length} transactions, you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}.`,
+    summary: `Based on your ${transactions.length} transactions, you've earned ${formatMoney(totalIncome, currency)} and spent ${formatMoney(totalSpent, currency)}.`,
     suggestions,
   };
 }
@@ -564,6 +566,8 @@ export function generateFallbackInsight(
   transactions: Transaction[],
   type: "daily" | "weekly"
 ): { title: string; content: string; suggestedAction: string } {
+  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
+  const currency = userProfile.currency || "USD";
   const totalIncome = transactions
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -578,13 +582,13 @@ export function generateFallbackInsight(
     if (net > 0) {
       return {
         title: "You're on track today",
-        content: `You've spent $${Math.round(totalSpent)} today while earning $${Math.round(totalIncome)}. That's a positive balance of $${Math.round(net)}.`,
+        content: `You've spent ${formatMoney(totalSpent, currency)} today while earning ${formatMoney(totalIncome, currency)}. That's a positive balance of ${formatMoney(net, currency)}.`,
         suggestedAction: "Consider setting aside a portion of today's surplus for your savings goals.",
       };
     } else {
       return {
         title: "Today's spending overview",
-        content: `You've spent $${Math.round(totalSpent)} today. Tracking your expenses is the first step to better financial awareness.`,
+        content: `You've spent ${formatMoney(totalSpent, currency)} today. Tracking your expenses is the first step to better financial awareness.`,
         suggestedAction: "Review your transactions to identify any non-essential purchases you could reduce tomorrow.",
       };
     }
@@ -593,13 +597,13 @@ export function generateFallbackInsight(
     if (net > 0) {
       return {
         title: "Positive week ahead",
-        content: `This week you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}, leaving you with $${Math.round(net)}. That's progress!`,
+        content: `This week you've earned ${formatMoney(totalIncome, currency)} and spent ${formatMoney(totalSpent, currency)}, leaving you with ${formatMoney(net, currency)}. That's progress!`,
         suggestedAction: "Consider allocating a portion of this week's surplus toward your financial goals.",
       };
     } else {
       return {
         title: "Weekly spending pattern",
-        content: `This week you've spent $${Math.round(totalSpent)} across ${transactions.filter((t) => t.amount < 0).length} transactions. Understanding your patterns helps you make better decisions.`,
+        content: `This week you've spent ${formatMoney(totalSpent, currency)} across ${transactions.filter((t) => t.amount < 0).length} transactions. Understanding your patterns helps you make better decisions.`,
         suggestedAction: "Look for one category where you can reduce spending by 10% next week.",
       };
     }
