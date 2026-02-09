@@ -110,10 +110,18 @@ function getErrorMessage(error: unknown): string {
   return "An unexpected error occurred. Please try again.";
 }
 
+export interface ChatCompletionResult {
+  content: string;
+  tokenUsage?: {
+    input: number;
+    output: number;
+  };
+}
+
 async function runChatCompletion(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   parameters: { max_new_tokens: number; temperature: number }
-): Promise<string> {
+): Promise<ChatCompletionResult> {
   const client = getHuggingFaceClient();
   const timeoutMs = 30000; // 30 seconds timeout
 
@@ -138,12 +146,44 @@ async function runChatCompletion(
       throw new Error("Received empty response from AI model");
     }
 
-    return content.trim();
-  } catch (error: any) {
+    // Extract token usage if available (HF API may include usage in response)
+    const tokenUsage = (result as any).usage
+      ? {
+        input: (result as any).usage.prompt_tokens || 0,
+        output: (result as any).usage.completion_tokens || 0,
+      }
+      : undefined;
+
+    // If usage not available, estimate from message lengths (rough approximation)
+    if (!tokenUsage) {
+      const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0) + content.length;
+      // Rough estimate: ~4 chars per token
+      const estimatedInput = Math.ceil(messages.reduce((sum, m) => sum + m.content.length, 0) / 4);
+      const estimatedOutput = Math.ceil(content.length / 4);
+      return {
+        content: content.trim(),
+        tokenUsage: {
+          input: estimatedInput,
+          output: estimatedOutput,
+        },
+      };
+    }
+
+    return {
+      content: content.trim(),
+      tokenUsage,
+    };
+  } catch (error: unknown) {
     const friendlyMessage = getErrorMessage(error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Unknown error";
     console.error("Hugging Face SDK error:", {
       model: HF_MODEL_ID,
-      message: error?.message,
+      message: errorMessage,
       friendlyMessage,
       error,
     });
@@ -160,9 +200,9 @@ export async function analyzeWithHuggingFace(
   userProfile: UserProfile,
   transactions: Transaction[],
   prompt: string
-): Promise<SpendingAnalysis> {
+): Promise<SpendingAnalysis & { tokenUsage?: { input: number; output: number } }> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -177,9 +217,14 @@ export async function analyzeWithHuggingFace(
     );
 
     // Parse the LLM response into SpendingAnalysis format
-    return parseLLMResponse(generatedText, transactions);
-  } catch (error) {
-    console.error("Hugging Face API error:", error);
+    const analysis = parseLLMResponse(result.content, transactions);
+    return {
+      ...analysis,
+      ...(result.tokenUsage && { tokenUsage: result.tokenUsage }),
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Hugging Face API error:", errorMessage);
     throw error;
   }
 }
@@ -200,7 +245,7 @@ export interface CoachResponseData {
  */
 export async function getCoachResponse(prompt: string): Promise<CoachResponseData | string> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -213,6 +258,8 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
         temperature: 0.7,
       }
     );
+
+    const generatedText = result.content;
 
     // Try to parse as JSON (for structured responses)
     try {
@@ -242,8 +289,9 @@ export async function getCoachResponse(prompt: string): Promise<CoachResponseDat
 
     // Fallback to plain text
     return generatedText.trim();
-  } catch (error) {
-    console.error("Hugging Face API error:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Hugging Face API error:", errorMessage);
     throw error;
   }
 }
@@ -258,6 +306,38 @@ function parseLLMResponse(
   responseText: string,
   transactions: Transaction[]
 ): SpendingAnalysis {
+  const cleanText = (value: unknown): string => {
+    if (typeof value !== "string") return "";
+    let text = value.trim();
+    // Remove markdown fences if the model stuffed them into fields
+    text = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    // Remove a leading "json:" or similar label
+    text = text.replace(/^json\s*[:\-]?\s*/i, "").trim();
+    return text;
+  };
+
+  const looksLikeJsonBlob = (text: string): boolean => {
+    const t = text.trim();
+    return (
+      (t.startsWith("{") && t.includes("}")) ||
+      (t.startsWith("[") && t.includes("]")) ||
+      t.includes(`"summary"`) ||
+      t.includes(`"patterns"`) ||
+      t.includes(`"suggestions"`)
+    );
+  };
+
+  const toCleanStringArray = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((v) => typeof v === "string")
+      .map((v) => cleanText(v))
+      .filter((v) => v.length > 0)
+      // Avoid showing raw JSON-looking strings in the UI
+      .filter((v) => !looksLikeJsonBlob(v))
+      .slice(0, 8);
+  };
+
   // Clean the response text - remove markdown code blocks if present
   let cleanedText = responseText.trim();
 
@@ -286,7 +366,6 @@ function parseLLMResponse(
   }
 
   if (!jsonMatch) {
-    console.warn("Could not find JSON in LLM response, attempting to parse entire response");
     // Last resort: try parsing the entire cleaned text
     try {
       const parsed = JSON.parse(cleanedText);
@@ -299,11 +378,30 @@ function parseLLMResponse(
   }
 
   if (!jsonMatch) {
+    // Log the actual response for debugging (first 200 chars only to avoid spam)
+    const preview = responseText.substring(0, 200);
+    console.warn(
+      `Could not find JSON in LLM response. Preview: ${preview}${responseText.length > 200 ? "..." : ""}`
+    );
     throw new Error("Could not find JSON in LLM response");
   }
 
   try {
     const parsed = JSON.parse(jsonMatch[0]);
+
+    // Some models occasionally embed the whole JSON response inside a string field.
+    // If that happens, try to recover the actual fields.
+    let recovered: any = parsed;
+    if (typeof parsed?.summary === "string" && looksLikeJsonBlob(parsed.summary)) {
+      try {
+        const maybe = JSON.parse(cleanText(parsed.summary));
+        if (maybe && typeof maybe === "object") {
+          recovered = maybe;
+        }
+      } catch {
+        // ignore recovery
+      }
+    }
 
     // Validate and construct SpendingAnalysis
     // Note: totalSpent, totalIncome, and byCategory will be enriched by the API route
@@ -311,17 +409,24 @@ function parseLLMResponse(
       totalSpent: 0, // Will be calculated and set by API route
       totalIncome: 0, // Will be calculated and set by API route
       byCategory: {}, // Will be calculated and set by API route
-      patterns: Array.isArray(parsed.patterns) ? parsed.patterns : [],
-      anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-      summary: parsed.summary || "Analysis generated successfully.",
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      patterns: toCleanStringArray(recovered?.patterns),
+      anomalies: toCleanStringArray(recovered?.anomalies),
+      summary:
+        typeof recovered?.summary === "string" && cleanText(recovered.summary).length > 0
+          ? cleanText(recovered.summary)
+          : "Here’s a summary of your spending patterns.",
+      suggestions: toCleanStringArray(recovered?.suggestions),
     };
 
     return analysis;
-  } catch (error) {
-    console.error("Failed to parse LLM response:", error);
-    console.error("Response text:", responseText);
-    console.error("Extracted JSON:", jsonMatch[0]);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown parse error";
+    // Log preview only (first 200 chars) to avoid spam
+    const responsePreview = responseText.substring(0, 200);
+    const jsonPreview = jsonMatch[0]?.substring(0, 200) || "N/A";
+    console.warn(
+      `Failed to parse LLM response: ${errorMessage}. Response preview: ${responsePreview}${responseText.length > 200 ? "..." : ""}. JSON preview: ${jsonPreview}${jsonMatch[0]?.length > 200 ? "..." : ""}`
+    );
     throw new Error("Failed to parse LLM response as valid JSON");
   }
 }
@@ -333,6 +438,8 @@ export function generateFallbackAnalysis(
   userProfile: UserProfile,
   transactions: Transaction[]
 ): SpendingAnalysis {
+  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
+  const currency = userProfile.currency || "USD";
   const totalIncome = transactions
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -356,11 +463,11 @@ export function generateFallbackAnalysis(
   // Add patterns
   if (net > 0) {
     patterns.push(
-      `You're saving $${Math.round(net)} this period, which is great progress!`
+      `You're saving ${formatMoney(net, currency)} this period, which is great progress!`
     );
   } else {
     patterns.push(
-      `You're spending $${Math.abs(Math.round(net))} more than you're earning.`
+      `You're spending ${formatMoney(Math.abs(net), currency)} more than you're earning.`
     );
   }
 
@@ -378,11 +485,11 @@ export function generateFallbackAnalysis(
   if (userProfile.goals.includes("build-emergency-fund")) {
     if (net > 0) {
       suggestions.push(
-        `You're saving $${Math.round(net)} per period. Consider setting aside $${Math.round(net * 0.5)} for your emergency fund.`
+        `You're saving ${formatMoney(net, currency)} per period. Consider setting aside ${formatMoney(net * 0.5, currency)} for your emergency fund.`
       );
     } else {
       suggestions.push(
-        `To build an emergency fund, try to reduce expenses by $${Math.abs(Math.round(net)) + 100} per period.`
+        `To build an emergency fund, try to reduce expenses by about ${formatMoney(Math.abs(net) + 100, currency)} per period.`
       );
     }
   }
@@ -399,7 +506,7 @@ export function generateFallbackAnalysis(
     byCategory,
     patterns,
     anomalies: [],
-    summary: `Based on your ${transactions.length} transactions, you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}.`,
+    summary: `Based on your ${transactions.length} transactions, you've earned ${formatMoney(totalIncome, currency)} and spent ${formatMoney(totalSpent, currency)}.`,
     suggestions,
   };
 }
@@ -419,7 +526,7 @@ export interface InsightResponseData {
  */
 export async function generateInsight(prompt: string): Promise<InsightResponseData | string> {
   try {
-    const generatedText = await runChatCompletion(
+    const result = await runChatCompletion(
       [
         {
           role: "system",
@@ -433,30 +540,37 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
       }
     );
 
+    const generatedText = result.content;
+
     // Try to parse as JSON (for structured responses)
     try {
-      // Remove markdown code blocks if present
-      let cleanedText = generatedText.trim();
-      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-      cleanedText = cleanedText.trim();
+      const { sanitizeModelField, stripMarkdownCodeFences } = require("../utils/text") as typeof import("../utils/text");
+
+      // Remove markdown code blocks if present (robust)
+      let cleanedText = stripMarkdownCodeFences(generatedText.trim());
 
       // Try to extract JSON object
       const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        const maybe = (parsed && typeof parsed === "object" ? parsed : null) as any;
+        const root = maybe?.financial_insight && typeof maybe.financial_insight === "object"
+          ? maybe.financial_insight
+          : maybe;
+
         // Validate structure
         if (
-          parsed.title &&
-          parsed.content &&
-          parsed.suggestedAction &&
-          typeof parsed.title === "string" &&
-          typeof parsed.content === "string" &&
-          typeof parsed.suggestedAction === "string"
+          root?.title &&
+          root?.content &&
+          root?.suggestedAction &&
+          typeof root.title === "string" &&
+          typeof root.content === "string" &&
+          typeof root.suggestedAction === "string"
         ) {
           return {
-            title: parsed.title,
-            content: parsed.content,
-            suggestedAction: parsed.suggestedAction,
+            title: sanitizeModelField(root.title) || "Financial insight",
+            content: sanitizeModelField(root.content) || "Here’s a quick insight based on your recent activity.",
+            suggestedAction: sanitizeModelField(root.suggestedAction) || "Keep tracking your spending to build better habits.",
           } as InsightResponseData;
         }
       }
@@ -466,8 +580,9 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
     }
 
     // Fallback to plain text
-    return generatedText.trim();
-  } catch (error) {
+    const { stripMarkdownCodeFences } = require("../utils/text") as typeof import("../utils/text");
+    return stripMarkdownCodeFences(generatedText.trim());
+  } catch (error: unknown) {
     // Error already logged in runChatCompletion
     throw error;
   }
@@ -506,6 +621,8 @@ export function generateFallbackInsight(
   transactions: Transaction[],
   type: "daily" | "weekly"
 ): { title: string; content: string; suggestedAction: string } {
+  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
+  const currency = userProfile.currency || "USD";
   const totalIncome = transactions
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -520,13 +637,13 @@ export function generateFallbackInsight(
     if (net > 0) {
       return {
         title: "You're on track today",
-        content: `You've spent $${Math.round(totalSpent)} today while earning $${Math.round(totalIncome)}. That's a positive balance of $${Math.round(net)}.`,
+        content: `You've spent ${formatMoney(totalSpent, currency)} today while earning ${formatMoney(totalIncome, currency)}. That's a positive balance of ${formatMoney(net, currency)}.`,
         suggestedAction: "Consider setting aside a portion of today's surplus for your savings goals.",
       };
     } else {
       return {
         title: "Today's spending overview",
-        content: `You've spent $${Math.round(totalSpent)} today. Tracking your expenses is the first step to better financial awareness.`,
+        content: `You've spent ${formatMoney(totalSpent, currency)} today. Tracking your expenses is the first step to better financial awareness.`,
         suggestedAction: "Review your transactions to identify any non-essential purchases you could reduce tomorrow.",
       };
     }
@@ -535,13 +652,13 @@ export function generateFallbackInsight(
     if (net > 0) {
       return {
         title: "Positive week ahead",
-        content: `This week you've earned $${Math.round(totalIncome)} and spent $${Math.round(totalSpent)}, leaving you with $${Math.round(net)}. That's progress!`,
+        content: `This week you've earned ${formatMoney(totalIncome, currency)} and spent ${formatMoney(totalSpent, currency)}, leaving you with ${formatMoney(net, currency)}. That's progress!`,
         suggestedAction: "Consider allocating a portion of this week's surplus toward your financial goals.",
       };
     } else {
       return {
         title: "Weekly spending pattern",
-        content: `This week you've spent $${Math.round(totalSpent)} across ${transactions.filter((t) => t.amount < 0).length} transactions. Understanding your patterns helps you make better decisions.`,
+        content: `This week you've spent ${formatMoney(totalSpent, currency)} across ${transactions.filter((t) => t.amount < 0).length} transactions. Understanding your patterns helps you make better decisions.`,
         suggestedAction: "Look for one category where you can reduce spending by 10% next week.",
       };
     }

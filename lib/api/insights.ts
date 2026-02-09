@@ -22,7 +22,7 @@ export async function generateInsight(
   userProfile: UserProfile,
   transactions: Transaction[],
   type: "daily" | "weekly" = "daily",
-  promptVersion: PromptVersion = PROMPT_VERSIONS.v2
+  promptVersion: PromptVersion = PROMPT_VERSIONS.v3
 ): Promise<InsightResponse> {
   const response = await fetch("/api/ai/insights", {
     method: "POST",

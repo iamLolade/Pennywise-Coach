@@ -65,10 +65,11 @@ export async function POST(request: NextRequest) {
       comparison,
       traceId, // Return traceId so user can find it in Opik
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error comparing experiments:", error);
+    const message = error instanceof Error ? error.message : "Failed to compare experiments";
     return NextResponse.json(
-      { error: error.message || "Failed to compare experiments" },
+      { error: message },
       { status: 500 }
     );
   }

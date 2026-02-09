@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { sanitizeModelField, isLikelyJsonFragment } from "@/lib/utils/text";
 
 interface InsightCardProps {
   title: string;
@@ -17,10 +18,22 @@ export function InsightCard({
   suggestedAction,
   highlight,
 }: InsightCardProps) {
+  const safeTitle = (() => {
+    const t = sanitizeModelField(title) || "Financial insight";
+    return isLikelyJsonFragment(t) ? "Financial insight" : t;
+  })();
+
+  const safeContent = (() => {
+    const c = sanitizeModelField(content);
+    return !c || isLikelyJsonFragment(c) ? "Here’s a quick insight based on your recent activity." : c;
+  })();
+
+  const safeAction = suggestedAction ? sanitizeModelField(suggestedAction) : "";
+
   return (
     <Card className="border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
       <CardHeader>
-        <CardTitle className="text-base font-semibold">{title}</CardTitle>
+        <CardTitle className="text-base font-semibold">{safeTitle}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {highlight && (
@@ -28,13 +41,13 @@ export function InsightCard({
             {highlight}
           </div>
         )}
-        <p className="text-sm text-foreground leading-relaxed">{content}</p>
-        {suggestedAction && (
+        <p className="text-sm text-foreground leading-relaxed">{safeContent}</p>
+        {safeAction && !isLikelyJsonFragment(safeAction) && (
           <div className="rounded-lg border border-border bg-muted/40 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Suggested action
             </p>
-            <p className="text-sm text-foreground mt-2">{suggestedAction}</p>
+            <p className="text-sm text-foreground mt-2">{safeAction}</p>
           </div>
         )}
       </CardContent>

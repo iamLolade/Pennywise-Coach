@@ -3,6 +3,9 @@
  * Versioned for experiment tracking in Opik
  */
 
+import { formatMoney } from "@/lib/utils/money";
+import { humanizeProfileForPrompt } from "@/lib/ai/profileHumanizer";
+
 export const PROMPT_VERSIONS = {
   v1: "v1-baseline",
   v2: "v2-improved",
@@ -20,6 +23,7 @@ export function getAnalysisPrompt(
     incomeRange: string;
     goals: string[];
     concerns: string[];
+    currency?: string;
   },
   transactions: Array<{
     amount: number;
@@ -29,18 +33,63 @@ export function getAnalysisPrompt(
   }>,
   userQuestion?: string
 ): string {
+  const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
+    humanizeProfileForPrompt(userProfile);
+
+  const totalIncome = transactions
+    .filter((t) => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+  const totalSpent = Math.abs(
+    transactions
+      .filter((t) => t.amount < 0)
+      .reduce((sum, t) => sum + t.amount, 0)
+  );
+  const net = totalIncome - totalSpent;
+
+  const spendByCategory: Record<string, number> = {};
+  for (const t of transactions) {
+    if (t.amount < 0) {
+      spendByCategory[t.category] =
+        (spendByCategory[t.category] || 0) + Math.abs(t.amount);
+    }
+  }
+  const topSpendCategories = Object.entries(spendByCategory)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      sharePct: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0,
+    }));
+
   const basePrompt = `You are a supportive, non-judgmental financial coach helping someone understand their spending and make better financial decisions.
 
 User Profile:
-- Income Range: ${userProfile.incomeRange}
-- Goals: ${userProfile.goals.join(", ")}
-- Concerns: ${userProfile.concerns.join(", ")}
+- Income Range: ${incomeRangeLabel}
+- Goals: ${goalsLabels.join(", ") || "Not provided"}
+- Concerns: ${concernsLabels.join(", ") || "Not provided"}
+- Currency: ${currency}
+
+Quick Summary (computed from transactions):
+- Total income: ${formatMoney(totalIncome, currency)}
+- Total spent: ${formatMoney(totalSpent, currency)}
+- Net: ${formatMoney(net, currency)}
+- Top spend categories: ${
+    topSpendCategories.length > 0
+      ? topSpendCategories
+          .map(
+            (c) =>
+              `${c.category} (${formatMoney(c.amount, currency)} ~${c.sharePct}%)`
+          )
+          .join(", ")
+      : "Not enough data yet"
+  }
 
 Recent Transactions:
 ${transactions
       .map(
         (t) =>
-          `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category} - ${t.description}`
+          `- ${t.date}: ${formatMoney(Math.abs(t.amount), currency, { maximumFractionDigits: 2 })} in ${t.category} - ${t.description}`
       )
       .join("\n")}
 
@@ -70,7 +119,9 @@ IMPORTANT:
 - Use plain language (avoid financial jargon)
 - Be supportive and non-judgmental
 - Keep suggestions realistic and actionable
-- Ensure all arrays have at least 2 items`
+- Ensure all arrays have at least 2 items
+- Ground your patterns/suggestions in the Quick Summary and transactions (mention categories/amounts when helpful)
+- Each of "summary", and each item in "patterns"/"anomalies"/"suggestions" MUST be plain text (no JSON fragments, no quotes-as-code, no backticks).`
   );
 }
 
@@ -83,6 +134,7 @@ export function getInsightPrompt(
     incomeRange: string;
     goals: string[];
     concerns: string[];
+    currency?: string;
   },
   recentTransactions: Array<{
     amount: number;
@@ -91,19 +143,26 @@ export function getInsightPrompt(
   }>,
   summary: string
 ): string {
-  const basePrompt = `Generate a short, encouraging daily financial insight for this user.
+  const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
+    humanizeProfileForPrompt(userProfile);
+
+  const basePrompt = `Generate a short, encouraging financial insight for this user.
 
 User Profile:
-- Income Range: ${userProfile.incomeRange}
-- Goals: ${userProfile.goals.join(", ")}
-- Concerns: ${userProfile.concerns.join(", ")}
+- Income Range: ${incomeRangeLabel}
+- Goals: ${goalsLabels.join(", ") || "Not provided"}
+- Concerns: ${concernsLabels.join(", ") || "Not provided"}
+- Currency: ${currency}
 
 Recent Activity Summary: ${summary}
 
 Recent Transactions (last 3 days):
 ${recentTransactions
       .slice(-3)
-      .map((t) => `- ${t.date}: $${Math.abs(t.amount).toFixed(2)} in ${t.category}`)
+      .map(
+        (t) =>
+          `- ${t.date}: ${formatMoney(Math.abs(t.amount), currency, { maximumFractionDigits: 2 })} in ${t.category}`
+      )
       .join("\n")}`;
 
   if (version === PROMPT_VERSIONS.v1) {
@@ -139,6 +198,7 @@ IMPORTANT:
 - Focus on positive observations and gentle guidance
 - Keep content concise (under 100 words total)
 - Ensure the suggestedAction is specific and achievable
+- Each of "title", "content", and "suggestedAction" MUST be plain text (no JSON fragments, no backticks, no code fences).
 - Never give investment advice or make guarantees`
   );
 }
@@ -164,15 +224,15 @@ export function getCoachPrompt(
     description: string;
   }>
 ): string {
-  const currency = userProfile.currency || "USD";
-  const currencySymbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$";
+  const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
+    humanizeProfileForPrompt(userProfile);
 
   const basePrompt = `You are Penny, a supportive, empathetic financial coach. Your role is to help users understand their finances in plain language and take small, achievable steps toward their goals.
 
 User Profile:
-- Income Range: ${userProfile.incomeRange}
-- Financial Goals: ${userProfile.goals.join(", ")}
-- Concerns: ${userProfile.concerns.join(", ")}
+- Income Range: ${incomeRangeLabel}
+- Financial Goals: ${goalsLabels.join(", ") || "Not provided"}
+- Concerns: ${concernsLabels.join(", ") || "Not provided"}
 - Currency: ${currency}
 
 ${recentTransactions && recentTransactions.length > 0 ? `Recent Spending Context (last 7 days):
@@ -180,7 +240,7 @@ ${recentTransactions
         .slice(0, 5)
         .map(
           (t) =>
-            `- ${t.date}: ${currencySymbol}${Math.abs(t.amount).toFixed(2)} in ${t.category} - ${t.description}`
+            `- ${t.date}: ${formatMoney(Math.abs(t.amount), currency, { maximumFractionDigits: 2 })} in ${t.category} - ${t.description}`
         )
         .join("\n")}
 ` : ""}
@@ -216,6 +276,7 @@ Guidelines:
 - Be supportive and non-judgmental (never shame or criticize)
 - Reference their goals and concerns when relevant
 - If they ask about spending, reference their recent transactions if provided
+- Never invent user-specific facts (income range, last expense, totals, balances, or transaction history). If the answer isn't explicitly in the provided User Profile / Recent Spending Context / Financial Summary, say you don't have enough data and suggest where to find it (Dashboard/Transactions/Settings).
 - Keep responses conversational, warm, and human
 - Never give specific investment advice or guarantee outcomes
 - Return ONLY valid JSON, no additional text or markdown`

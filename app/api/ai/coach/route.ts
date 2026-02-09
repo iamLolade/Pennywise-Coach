@@ -7,8 +7,10 @@ import {
 } from "@/lib/ai/huggingface";
 import { getCoachPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateCoachResponse } from "@/lib/ai/evaluations";
-import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { generateTraceId, logTrace, logEvaluation, logSpan, categorizeError } from "@/lib/opik/client";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getTransactions } from "@/lib/supabase/transactions";
+import { buildGroundedAnswer, questionNeedsTransactions } from "@/lib/ai/grounding";
 import type { UserProfile } from "@/types";
 
 /**
@@ -39,6 +41,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If the user is asking for factual account data (salary range, last expense, etc),
+    // answer deterministically from stored data to avoid hallucinations.
+    const needsTransactions = includeTransactions || questionNeedsTransactions(currentQuestion);
+
     // Optionally fetch recent transactions for context
     let recentTransactions: Array<{
       amount: number;
@@ -47,7 +53,7 @@ export async function POST(request: NextRequest) {
       description: string;
     }> | undefined;
     
-    if (includeTransactions) {
+    if (needsTransactions) {
       try {
         const allTransactions = await getTransactions();
         // Get last 7 days of transactions
@@ -62,13 +68,76 @@ export async function POST(request: NextRequest) {
             date: t.date,
             description: t.description,
           }));
+
+        const grounded = buildGroundedAnswer({
+          question: currentQuestion,
+          userProfile,
+          transactions: allTransactions,
+        });
+
+        if (grounded) {
+          const response = grounded.response;
+
+          // Evaluate + log as a non-LLM response (still useful for Opik + regressions)
+          const evaluation = evaluateCoachResponse(response, currentQuestion, userProfile);
+          const latency = Date.now() - startTime;
+
+          await logTrace({
+            traceId,
+            experimentName: "coach-chat",
+            promptVersion,
+            input: {
+              userProfile,
+              conversationHistory: conversationHistory || [],
+              currentQuestion,
+              transactions: recentTransactions,
+            },
+            output: {
+              response,
+              structuredData: null,
+            },
+            metadata: {
+              timestamp: new Date().toISOString(),
+              latency,
+              usedAI: false,
+              groundedKind: grounded.kind,
+              evaluationScore: evaluation.average,
+            },
+          });
+
+          await logEvaluation({
+            traceId,
+            scores: {
+              clarity: evaluation.clarity,
+              helpfulness: evaluation.helpfulness,
+              tone: evaluation.tone,
+              financialAlignment: evaluation.financialAlignment,
+              safetyFlags: evaluation.safetyFlags,
+              average: evaluation.average,
+            },
+            reasoning: evaluation.reasoning,
+            promptVersion,
+            evaluator: "heuristic",
+          });
+
+          return NextResponse.json({
+            response,
+            traceId,
+            promptVersion,
+            evaluation: {
+              average: evaluation.average,
+              safetyFlags: evaluation.safetyFlags,
+            },
+          });
+        }
       } catch (error) {
         console.warn("Failed to fetch transactions for coach context:", error);
         // Continue without transactions
       }
     }
 
-    // Build prompt with improved structure
+    // Span 1: Prompt Build
+    const promptBuildStart = Date.now();
     const prompt = getCoachPrompt(
       promptVersion,
       userProfile,
@@ -77,15 +146,47 @@ export async function POST(request: NextRequest) {
       contextSummary || undefined,
       recentTransactions
     );
+    const promptBuildLatency = Date.now() - promptBuildStart;
+    await logSpan({
+      spanName: "prompt-build",
+      parentTraceId: traceId,
+      metadata: {
+        latency: promptBuildLatency,
+        promptLength: prompt.length,
+      },
+    });
 
     // Try AI response first, fallback to rule-based if it fails
     let response: string;
     let responseData: CoachResponseData | null = null;
     let usedAI = false;
+    let tokenUsage: { input: number; output: number } | undefined;
+    let llmCallLatency = 0;
+    let parseLatency = 0;
 
     try {
+      // Span 2: LLM Call
+      const llmCallStart = Date.now();
       const aiResponse = await getCoachResponse(prompt);
+      llmCallLatency = Date.now() - llmCallStart;
       usedAI = true;
+      
+      // Extract token usage if available (from result object if it has tokenUsage)
+      if (typeof aiResponse === "object" && "tokenUsage" in aiResponse) {
+        tokenUsage = (aiResponse as any).tokenUsage;
+      }
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          ...(tokenUsage && { tokenUsage }),
+        },
+      });
+      
+      // Span 3: Parse
+      const parseStart = Date.now();
 
       // Handle structured response
       if (typeof aiResponse === "object" && "response" in aiResponse) {
@@ -95,18 +196,54 @@ export async function POST(request: NextRequest) {
         // Plain text response
         response = typeof aiResponse === "string" ? aiResponse : String(aiResponse);
       }
+      parseLatency = Date.now() - parseStart;
+      
+      await logSpan({
+        spanName: "parse",
+        parentTraceId: traceId,
+        metadata: {
+          latency: parseLatency,
+          isStructured: !!responseData,
+        },
+      });
     } catch (error) {
+      const errorCategory = categorizeError(error);
       console.warn("AI coach response failed, using fallback:", error);
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          error: {
+            category: errorCategory,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+      });
+      
       // Fallback to rule-based response
       response = generateFallbackCoachResponse(userProfile, currentQuestion);
     }
 
-    // Evaluate the response quality
+    // Span 4: Evaluation
+    const evalStart = Date.now();
     const evaluation = evaluateCoachResponse(
       response,
       currentQuestion,
       userProfile
     );
+    const evalLatency = Date.now() - evalStart;
+    
+    await logSpan({
+      spanName: "evaluation",
+      parentTraceId: traceId,
+      metadata: {
+        latency: evalLatency,
+        averageScore: evaluation.average,
+        safetyFlags: evaluation.safetyFlags,
+      },
+    });
 
     // Log trace to Opik
     const latency = Date.now() - startTime;
@@ -129,10 +266,17 @@ export async function POST(request: NextRequest) {
         latency,
         usedAI,
         evaluationScore: evaluation.average,
+        latencyBreakdown: {
+          promptBuild: promptBuildLatency,
+          llmCall: llmCallLatency,
+          parse: parseLatency,
+          evaluation: evalLatency,
+        },
+        ...(tokenUsage && { tokenUsage }),
       },
     });
 
-    // Log evaluation to Opik with promptVersion for regression tracking
+    // Log heuristic evaluation to Opik
     await logEvaluation({
       traceId,
       scores: {
@@ -145,7 +289,37 @@ export async function POST(request: NextRequest) {
       },
       reasoning: evaluation.reasoning,
       promptVersion,
+      evaluator: "heuristic",
     });
+
+    // Optional online LLM-as-judge evaluation (enabled via OPIK_LLM_JUDGE_ENABLED)
+    if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+      const judge = await runLlmJudgeEvaluation({
+        userQuestion: currentQuestion,
+        aiResponse: response,
+        userProfile: {
+          goals: userProfile.goals || [],
+          concerns: userProfile.concerns || [],
+        },
+      });
+
+      if (judge) {
+        await logEvaluation({
+          traceId,
+          scores: {
+            clarity: judge.raw.clarity * 2,
+            helpfulness: judge.raw.helpfulness * 2,
+            tone: judge.raw.tone * 2,
+            financialAlignment: judge.raw.financialAlignment * 2,
+            safetyFlags: judge.raw.safetyFlags,
+            average: judge.average0to10,
+          },
+          reasoning: judge.raw.reasoning,
+          promptVersion,
+          evaluator: "llm_judge",
+        });
+      }
+    }
 
     return NextResponse.json({
       response,

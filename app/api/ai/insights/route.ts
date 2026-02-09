@@ -7,11 +7,14 @@ import {
 } from "@/lib/ai/huggingface";
 import { getInsightPrompt, PROMPT_VERSIONS } from "@/lib/ai/prompts";
 import { evaluateInsight } from "@/lib/ai/evaluations";
-import { generateTraceId, logTrace, logEvaluation } from "@/lib/opik/client";
+import { generateTraceId, logTrace, logEvaluation, logSpan, categorizeError } from "@/lib/opik/client";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import {
   calculateTotalIncome,
   calculateTotalExpenses,
 } from "@/lib/utils/transactions";
+import { formatMoney } from "@/lib/utils/money";
+import { isLikelyJsonFragment, sanitizeModelField, stripMarkdownCodeFences } from "@/lib/utils/text";
 import type { Transaction, UserProfile } from "@/types";
 
 /**
@@ -51,7 +54,14 @@ export async function POST(request: NextRequest) {
     const totalIncome = calculateTotalIncome(transactions);
     const totalSpent = calculateTotalExpenses(transactions);
     const net = totalIncome - totalSpent;
-    const summary = `${transactions.length} transactions, $${Math.round(totalIncome)} income, $${Math.round(totalSpent)} spent, $${Math.round(net)} net.`;
+    const currency = userProfile.currency || "USD";
+    const summary = `${transactions.length} transactions, ${formatMoney(
+      totalIncome,
+      currency
+    )} income, ${formatMoney(totalSpent, currency)} spent, ${formatMoney(
+      net,
+      currency
+    )} net.`;
 
     // Get recent transactions based on type
     const recentTransactions = type === "daily" 
@@ -63,7 +73,18 @@ export async function POST(request: NextRequest) {
         }).slice(-10)
       : transactions.slice(-20); // Last 20 for weekly
 
-    // Build prompt
+    // Try AI generation first, fallback to rule-based if it fails
+    let insight: { title: string; content: string; suggestedAction: string };
+    let usedAI = false;
+    let evaluationScore: number | undefined;
+    let tokenUsage: { input: number; output: number } | undefined;
+    let llmCallLatency = 0;
+    let parseLatency = 0;
+    let promptBuildLatency = 0;
+    let evalLatency = 0;
+
+    // Span 1: Prompt Build
+    const promptBuildStart = Date.now();
     const prompt = getInsightPrompt(
       promptVersion,
       userProfile,
@@ -74,34 +95,103 @@ export async function POST(request: NextRequest) {
       })),
       summary
     );
-
-    // Try AI generation first, fallback to rule-based if it fails
-    let insight: { title: string; content: string; suggestedAction: string };
-    let usedAI = false;
-    let evaluationScore: number | undefined;
+    promptBuildLatency = Date.now() - promptBuildStart;
+    await logSpan({
+      spanName: "prompt-build",
+      parentTraceId: traceId,
+      metadata: {
+        latency: promptBuildLatency,
+        promptLength: prompt.length,
+      },
+    });
 
     try {
+      // Span 2: LLM Call
+      const llmCallStart = Date.now();
       const aiResponse = await generateInsight(prompt);
+      llmCallLatency = Date.now() - llmCallStart;
       usedAI = true;
-
+      
+      // Extract token usage if available
+      if (typeof aiResponse === "object" && "tokenUsage" in aiResponse) {
+        tokenUsage = (aiResponse as any).tokenUsage;
+      }
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          ...(tokenUsage && { tokenUsage }),
+        },
+      });
+      
+      // Span 3: Parse
+      const parseStart = Date.now();
+      
       // Handle structured response or plain text
       if (typeof aiResponse === "object" && "title" in aiResponse && "content" in aiResponse) {
         // Structured response
-        insight = aiResponse as InsightResponseData;
+        const structured = aiResponse as InsightResponseData;
+        insight = {
+          title: sanitizeModelField(structured.title) || "Financial insight",
+          content: sanitizeModelField(structured.content) || "Here’s a quick insight based on your recent activity.",
+          suggestedAction:
+            sanitizeModelField(structured.suggestedAction) ||
+            "Keep tracking your spending to build better habits.",
+        };
       } else {
         // Plain text response - parse it
-        const lines = (aiResponse as string).split("\n").filter((line) => line.trim());
+        const cleaned = stripMarkdownCodeFences(String(aiResponse || "")).trim();
+        const lines = cleaned
+          .split("\n")
+          .map((l) => sanitizeModelField(l))
+          .filter((line) => line.trim())
+          .filter((line) => line !== "{" && line !== "}" && line !== "[" && line !== "]")
+          .filter((line) => !isLikelyJsonFragment(line));
+
+        const titleLine = lines.find((l) => l.length >= 4) || "Financial insight";
+        const actionLine =
+          lines.slice().reverse().find((l) => l.length >= 6) ||
+          "Keep tracking your spending to build better habits.";
+        const bodyLines = lines.filter((l) => l !== titleLine && l !== actionLine);
+
         insight = {
-          title: lines[0]?.replace(/^[-*]\s*/, "").trim() || "Financial insight",
-          content: lines.slice(0, 2).join(" ").trim() || (aiResponse as string),
-          suggestedAction: lines[lines.length - 1]?.replace(/^[-*]\s*/, "").trim() || "Keep tracking your spending to build better habits.",
+          title: titleLine,
+          content:
+            bodyLines.slice(0, 2).join(" ").trim() ||
+            "Here’s a quick insight based on your recent activity.",
+          suggestedAction: actionLine,
         };
       }
+      
+      parseLatency = Date.now() - parseStart;
+      
+      await logSpan({
+        spanName: "parse",
+        parentTraceId: traceId,
+        metadata: {
+          latency: parseLatency,
+          isStructured: typeof aiResponse === "object" && "title" in aiResponse,
+        },
+      });
 
-      // Evaluate the insight
+      // Span 4: Evaluation
+      const evalStart = Date.now();
       try {
         const evaluation = evaluateInsight(insight, userProfile, type);
         evaluationScore = evaluation.average;
+        evalLatency = Date.now() - evalStart;
+        
+        await logSpan({
+          spanName: "evaluation",
+          parentTraceId: traceId,
+          metadata: {
+            latency: evalLatency,
+            averageScore: evaluation.average,
+            safetyFlags: evaluation.safetyFlags,
+          },
+        });
 
         // Log evaluation to Opik with promptVersion for regression tracking
         // Map insight scores to OpikEvaluation format (relevance -> helpfulness, actionability -> financialAlignment)
@@ -117,13 +207,57 @@ export async function POST(request: NextRequest) {
           },
           reasoning: evaluation.reasoning,
           promptVersion,
+          evaluator: "heuristic",
         });
+
+        // Optional online LLM-as-judge evaluation (enabled via OPIK_LLM_JUDGE_ENABLED)
+        if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+          const judge = await runLlmJudgeEvaluation({
+            userQuestion: `Generate a ${type} insight`,
+            aiResponse: `${insight.title}\n${insight.content}\nSuggested action: ${insight.suggestedAction}`,
+            userProfile: {
+              goals: userProfile.goals || [],
+              concerns: userProfile.concerns || [],
+            },
+          });
+
+          if (judge) {
+            await logEvaluation({
+              traceId,
+              scores: {
+                clarity: judge.raw.clarity * 2,
+                helpfulness: judge.raw.helpfulness * 2,
+                tone: judge.raw.tone * 2,
+                financialAlignment: judge.raw.financialAlignment * 2,
+                safetyFlags: judge.raw.safetyFlags,
+                average: judge.average0to10,
+              },
+              reasoning: judge.raw.reasoning,
+              promptVersion,
+              evaluator: "llm_judge",
+            });
+          }
+        }
       } catch (evalError) {
         console.warn("Failed to evaluate insight:", evalError);
         // Continue without evaluation
       }
     } catch (error) {
+      const errorCategory = categorizeError(error);
       console.warn("AI insight generation failed, using fallback:", error);
+      
+      await logSpan({
+        spanName: "llm-call",
+        parentTraceId: traceId,
+        metadata: {
+          latency: llmCallLatency,
+          error: {
+            category: errorCategory,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
+      });
+      
       // Fallback to rule-based insight
       insight = generateFallbackInsight(userProfile, transactions, type);
     }
@@ -148,6 +282,13 @@ export async function POST(request: NextRequest) {
         usedAI,
         type,
         ...(evaluationScore !== undefined && { evaluationScore }),
+        latencyBreakdown: {
+          promptBuild: promptBuildLatency,
+          llmCall: llmCallLatency,
+          parse: parseLatency,
+          evaluation: evalLatency,
+        },
+        ...(tokenUsage && { tokenUsage }),
       },
     });
 

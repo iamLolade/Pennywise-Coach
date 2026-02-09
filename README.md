@@ -1,84 +1,88 @@
 # Pennywise Coach
 
-Pennywise Coach is a web-based AI financial health assistant that helps people understand their spending, build healthier money habits, and make confident decisions through calm, non-judgmental guidance. Built for hackathon submission with a focus on clarity, empathy, and responsible AI.
+Pennywise Coach is an AI-powered financial health assistant that turns transaction data into clear, non-judgmental guidance. It helps people understand spending patterns, build healthier money habits, and take realistic next steps without overwhelm.
 
-## Product Goals
+## Features
 
-- Reduce financial anxiety by explaining spending in plain language
-- Provide gentle, practical coaching and next steps
-- Highlight patterns without shame or complexity
-- Keep the UI minimal, calm, and easy to navigate
-
-## Core Features (MVP)
-
-- **Onboarding**: capture income range, goals, concerns, and currency
+- **Onboarding**: capture currency, income range, goals, and concerns
 - **Dashboard**: spending summary, categories, transactions, and AI analysis
-- **Coach**: conversational AI guidance with saved history
-- **Insights**: daily and weekly guidance with AI generation
-- **Settings**: update onboarding preferences anytime
+- **Coach**: conversational guidance with saved history
+- **Insights**: daily/weekly insights generated from recent activity
+- **Settings**: update preferences anytime
 
 ## Tech Stack
 
 - **Next.js (App Router)**, **React**, **TypeScript**
 - **Tailwind CSS v4**, **Framer Motion**
-- **Supabase** for auth + data storage
-- **Hugging Face Inference API** for AI responses
-- **Opik** for observability and evaluation
-- **react-hot-toast**, **react-select**, **lucide-react**
+- **Supabase** (auth + persistence)
+- **Hugging Face Inference API** (LLM responses)
+- **Opik** (tracing, evaluations, experiments)
 
 ## Project Structure
 
-- `app/` — Next.js routes (auth + dashboard groups)
-- `components/` — reusable UI, dashboard, coach, insights
-- `lib/ai/` — prompts + Hugging Face integration
+- `app/` — routes (auth + dashboard route groups)
+- `components/` — UI and feature components
+- `lib/ai/` — prompts, model calls, evaluations
+- `lib/opik/` — tracing + experiments
 - `lib/supabase/` — auth + database helpers
-- `lib/api/` — client-side API wrappers
-- `docs/` — design + Opik plans
+- `docs/` — product/design notes and Opik guides
 
 ## Getting Started
-
-Install dependencies and run the dev server:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open `http://localhost:3000`.
 
-## Environment Variables
+## Configuration
 
 Create `.env.local`:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-HUGGINGFACE_API_KEY=your_huggingface_api_key
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Hugging Face
+HUGGINGFACE_API_KEY=...
+
+# Opik (optional, enables observability)
+OPIK_API_KEY=...
+OPIK_WORKSPACE=...
+OPIK_PROJECT_NAME=...
+OPIK_URL_OVERRIDE=...         # Optional
+OPIK_LLM_JUDGE_ENABLED=false  # Optional
 ```
 
-## Supabase Setup
+### Supabase setup
 
-Run the schema in `lib/supabase/schema.sql` in the Supabase SQL editor.
+Run `lib/supabase/schema.sql` in the Supabase SQL editor.
 
-Tables included:
-- `user_profiles`
-- `transactions`
-- `coach_conversations`
-- `insights`
+### Opik setup (optional)
 
-## AI + Opik Notes
+If `OPIK_API_KEY` is not set, the app **no-ops** Opik logging (local/dev-friendly).
 
-- **Model**: `meta-llama/Llama-3.1-8B-Instruct` via Hugging Face Inference API
-- **Client**: `@huggingface/inference` with `InferenceClient` and `chatCompletion`
-- **Features**: 30s timeout, automatic retries (2 retries with exponential backoff), friendly error messages
-- **Prompts**: Versioned in `lib/ai/prompts.ts` (v1, v2, v3)
-- **Trace logging**: `lib/opik/client.ts` - all AI calls log traces for evaluation
-- **Evaluation**: Coach responses are automatically evaluated (clarity, helpfulness, tone, alignment, safety)
-- **Fallbacks**: Rule-based responses when AI fails (graceful degradation)
+- **Dashboard**: `https://www.comet.com/opik/pennywise-coach/home`
+- **Guides**:
+  - `docs/OPIK_QUICK_GUIDE.md`
+  - `docs/OPIK_JUDGE_GUIDE.md`
+  - `docs/OPIK_EXPERIMENTS.md`
+
+## AI behavior and evaluation
+
+- **Model**: `meta-llama/Llama-3.1-8B-Instruct`
+- **Prompts**: versioned in `lib/ai/prompts.ts`
+- **Guardrails**: safety + PII checks in `lib/ai/evaluations.ts`
+- **Observability**:
+  - Traces for coach/insights/analysis
+  - Spans for prompt-build → LLM call → parse → evaluation
+  - Optional online LLM-as-judge when `OPIK_LLM_JUDGE_ENABLED=true`
 
 ## Scripts
 
-```
+```bash
 npm run dev
 npm run build
 npm run start
@@ -86,7 +90,11 @@ npm run start
 
 ## Deployment
 
-Deploy on Vercel or any Next.js host. Make sure the env vars are set and the Supabase schema has been applied.
+Deploy on Vercel (recommended) or any Next.js-compatible host.
+
+- Set the env vars above in your hosting provider
+- Apply the Supabase schema
+- Ensure Supabase auth redirect URLs are configured for your deployed domain
 
 ## License
 

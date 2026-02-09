@@ -2,6 +2,8 @@
 
 This guide helps judges navigate the Opik dashboard to evaluate our "Best Use of Opik" submission.
 
+**Quick Navigation**: See [OPIK_QUICK_GUIDE.md](OPIK_QUICK_GUIDE.md) for a faster reference.
+
 ## Accessing the Opik Dashboard
 
 1. **Workspace URL**: `https://www.comet.com/opik/pennywise-coach/home`
@@ -34,6 +36,8 @@ This guide helps judges navigate the Opik dashboard to evaluate our "Best Use of
 - `prompt:v3-structured-json` - Improved prompt version
 - `experiment:experiment-id-here` - Specific experiment run
 - `evaluation` - All evaluation traces
+- `evaluator:heuristic` - Heuristic evaluator (fast, rule-based)
+- `evaluator:llm_judge` - LLM-as-judge evaluator (online judge)
 
 ### 2. Evaluation Scores
 
@@ -53,6 +57,11 @@ Each evaluation trace contains:
 1. Filter by `prompt:v1-baseline` to see baseline scores
 2. Filter by `prompt:v3-structured-json` to see improved scores
 3. Compare average scores - v3 should show improvement
+
+**How to Compare Evaluators**:
+1. Filter by `evaluator:heuristic` to see rule-based scoring
+2. Filter by `evaluator:llm_judge` to see online LLM-as-judge scoring
+3. Compare score distributions and review judge reasoning text
 
 ### 3. Experiment Management
 
@@ -88,7 +97,63 @@ Traces where safety checks detected:
 
 **Key Metric**: Safety flag count should be **0** for production-ready responses.
 
-### 5. Regression Tracking
+### 4a. Safety Tradeoff Metrics (False Positives/Negatives)
+
+**Location**: LLM Evaluation (Opik) → Traces (filter by tag: `safety-tradeoff-metrics`)
+
+**What You'll See**:
+Traces showing safety detection performance:
+- **True Positives (TP)**: Correctly flagged unsafe content
+- **False Positives (FP)**: Incorrectly flagged safe content (overly cautious)
+- **False Negatives (FN)**: Missed unsafe content (safety gap)
+- **True Negatives (TN)**: Correctly identified safe content
+
+**Metrics**:
+- **Precision**: TP / (TP + FP) - How many flagged items were actually unsafe (higher = fewer false alarms)
+- **Recall**: TP / (TP + FN) - How many unsafe items were caught (higher = fewer missed risks)
+- **F1 Score**: Harmonic mean of precision and recall (balanced metric)
+
+**Interpretation**:
+- **High Precision + High Recall**: Ideal - catches unsafe content without false alarms
+- **High Precision + Low Recall**: Overly cautious - misses some risks but rarely false alarms
+- **Low Precision + High Recall**: Overly sensitive - catches risks but many false alarms
+- **Low Precision + Low Recall**: Poor safety detection
+
+**Example**: Precision 0.95, Recall 0.90, F1 0.92 means:
+- 95% of flagged content is actually unsafe (5% false positives)
+- 90% of unsafe content is caught (10% false negatives)
+- Overall balanced performance (F1 = 0.92)
+
+### 5. Pipeline Spans (Deep Observability)
+
+**Location**: LLM Evaluation (Opik) → Traces (filter by tag: `span`)
+
+**What You'll See**:
+Each AI interaction is broken down into spans showing the full pipeline:
+- **prompt-build**: Time to construct the prompt from user context
+- **llm-call**: Time for the LLM API call (includes token usage if available)
+- **parse**: Time to parse and structure the LLM response
+- **evaluation**: Time to evaluate response quality and safety
+
+**Key Metrics in Spans**:
+- **Latency breakdown**: See where time is spent (prompt build vs LLM call vs parse)
+- **Token usage**: Input/output token counts (when available from API)
+- **Error taxonomy**: Categorized errors (timeout, parse, API, fallback, validation)
+- **Structured vs plain text**: Whether response was successfully parsed as JSON
+
+**How to View**:
+1. Filter traces by tag: `span`
+2. Filter by parent trace ID: `parent:trace-id-here`
+3. Check metadata for latency breakdown and token usage
+4. Look for error categories in failed spans
+
+**Example Pipeline Breakdown**:
+- prompt-build: 5ms
+- llm-call: 2100ms (input: 150 tokens, output: 80 tokens)
+- parse: 12ms (isStructured: true)
+- evaluation: 8ms (averageScore: 8.2)
+
+### 6. Regression Tracking
 
 **Location**: LLM Evaluation (Opik) → Traces (filter by tag: `experiment-comparison`)
 
@@ -125,8 +190,13 @@ Experiment 1 (v1-baseline) → Experiment 2 (v3-structured-json)
 
 ### ✅ Evaluation and Observability
 - [ ] Comprehensive trace logging with metadata
+- [ ] Pipeline spans showing breakdown (prompt-build → llm-call → parse → evaluation)
+- [ ] Latency breakdown per pipeline stage
+- [ ] Token usage tracking (input/output tokens)
+- [ ] Error taxonomy (timeout, parse, API, fallback, validation)
 - [ ] Automated evaluation on 4+ metrics (clarity, helpfulness, tone, alignment)
 - [ ] Safety flagging for PII and risky advice
+- [ ] Safety tradeoff metrics (precision, recall, F1) for false positive/negative tracking
 - [ ] Experiment comparison shows measurable improvements
 
 ### ✅ Goal Alignment (Opik Integration)
@@ -135,6 +205,7 @@ Experiment 1 (v1-baseline) → Experiment 2 (v3-structured-json)
 - [ ] Comparison utilities show clear improvements (v1 → v3)
 - [ ] Regression detection flags quality decreases
 - [ ] Dashboard clearly shows evaluation scores and safety metrics
+- [ ] Safety tradeoff metrics demonstrate guardrail effectiveness (precision/recall/F1)
 
 ## Sample Experiment Results
 

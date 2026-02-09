@@ -49,7 +49,7 @@ export default function ExperimentsPage() {
       setExperiments((prev) => [data.experiment, ...prev]);
       setExperimentName("");
       showSuccess(`Experiment "${data.experiment.experimentName}" completed successfully!`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to run experiment:", error);
       showError(error, "general");
     } finally {
@@ -94,7 +94,7 @@ export default function ExperimentsPage() {
       const data = await response.json();
       setComparison(data.comparison);
       showSuccess("Experiments compared successfully!");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to compare experiments:", error);
       showError(error, "general");
     } finally {

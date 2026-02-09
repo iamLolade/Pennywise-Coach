@@ -8,6 +8,7 @@ import { EVAL_DATASET, type EvalScenario } from "@/lib/data/evalDataset";
 import { PROMPT_VERSIONS, type PromptVersion } from "@/lib/ai/prompts";
 import { generateTraceId, logTrace, logEvaluation, createExperiment } from "./client";
 import { evaluateCoachResponse } from "@/lib/ai/evaluations";
+import { runLlmJudgeEvaluation } from "@/lib/ai/judge";
 import { getCoachResponse } from "@/lib/ai/huggingface";
 import { getCoachPrompt } from "@/lib/ai/prompts";
 
@@ -39,6 +40,15 @@ export interface ExperimentResult {
   latency: number;
   usedAI: boolean;
   error?: string;
+  // Safety evaluation metrics
+  safetyEvaluation?: {
+    expectedUnsafe: boolean; // From scenario.shouldFlagAsUnsafe
+    detectedUnsafe: boolean; // From evaluation.safetyFlags
+    isTruePositive: boolean; // Correctly flagged unsafe
+    isFalsePositive: boolean; // Incorrectly flagged safe content
+    isFalseNegative: boolean; // Missed unsafe content
+    isTrueNegative: boolean; // Correctly identified safe content
+  };
 }
 
 export interface ExperimentSummary {
@@ -55,6 +65,15 @@ export interface ExperimentSummary {
   safetyFlagsCount: number;
   averageLatency: number;
   aiUsageRate: number; // Percentage of scenarios that used AI vs fallback
+  safetyMetrics?: {
+    truePositives: number;
+    falsePositives: number;
+    falseNegatives: number;
+    trueNegatives: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+  };
 }
 
 /**
@@ -118,8 +137,8 @@ export async function runExperiment(
         } else {
           response = aiResponse as string;
         }
-      } catch (err: any) {
-        error = err.message || "AI generation failed";
+      } catch (err: unknown) {
+        error = err instanceof Error ? err.message : "AI generation failed";
         // Use a simple fallback for evaluation
         response = `I understand you're asking about ${scenario.userQuestion}. Let me help you with that.`;
       }
@@ -136,7 +155,23 @@ export async function runExperiment(
         }
       );
 
-      // Log trace
+      // Calculate safety evaluation metrics (if scenario has expected safety flag)
+      let safetyEvaluation: ExperimentResult["safetyEvaluation"] | undefined;
+      if (scenario.shouldFlagAsUnsafe !== undefined) {
+        const expectedUnsafe = scenario.shouldFlagAsUnsafe;
+        const detectedUnsafe = evaluation.safetyFlags;
+        
+        safetyEvaluation = {
+          expectedUnsafe,
+          detectedUnsafe,
+          isTruePositive: expectedUnsafe && detectedUnsafe,
+          isFalsePositive: !expectedUnsafe && detectedUnsafe,
+          isFalseNegative: expectedUnsafe && !detectedUnsafe,
+          isTrueNegative: !expectedUnsafe && !detectedUnsafe,
+        };
+      }
+
+      // Log trace with safety evaluation metadata
       await logTrace({
         traceId,
         experimentName,
@@ -148,6 +183,10 @@ export async function runExperiment(
           userQuestion: scenario.userQuestion,
           scenarioId: scenario.id,
           scenarioName: scenario.name,
+          ...(scenario.shouldFlagAsUnsafe !== undefined && {
+            expectedUnsafe: scenario.shouldFlagAsUnsafe,
+            safetyReason: scenario.safetyReason,
+          }),
         },
         output: {
           response,
@@ -158,10 +197,20 @@ export async function runExperiment(
           usedAI,
           evaluationScore: evaluation.average,
           experimentId,
+          ...(safetyEvaluation && {
+            safetyEvaluation: {
+              expectedUnsafe: safetyEvaluation.expectedUnsafe,
+              detectedUnsafe: safetyEvaluation.detectedUnsafe,
+              isTruePositive: safetyEvaluation.isTruePositive,
+              isFalsePositive: safetyEvaluation.isFalsePositive,
+              isFalseNegative: safetyEvaluation.isFalseNegative,
+              isTrueNegative: safetyEvaluation.isTrueNegative,
+            },
+          }),
         },
       });
 
-      // Log evaluation with metadata for regression tracking
+      // Log heuristic evaluation with metadata for regression tracking
       await logEvaluation({
         traceId,
         scores: {
@@ -176,7 +225,39 @@ export async function runExperiment(
         promptVersion,
         experimentId,
         experimentName,
+        evaluator: "heuristic",
       });
+
+      // Optional LLM-as-judge evaluation (provides additional evaluation metrics)
+      if (process.env.OPIK_LLM_JUDGE_ENABLED === "true") {
+        const judge = await runLlmJudgeEvaluation({
+          userQuestion: scenario.userQuestion,
+          aiResponse: response,
+          userProfile: {
+            goals: scenario.userProfile.goals,
+            concerns: scenario.userProfile.concerns,
+          },
+        });
+
+        if (judge) {
+          await logEvaluation({
+            traceId,
+            scores: {
+              clarity: judge.raw.clarity * 2,
+              helpfulness: judge.raw.helpfulness * 2,
+              tone: judge.raw.tone * 2,
+              financialAlignment: judge.raw.financialAlignment * 2,
+              safetyFlags: judge.raw.safetyFlags,
+              average: judge.average0to10,
+            },
+            reasoning: judge.raw.reasoning,
+            promptVersion,
+            experimentId,
+            experimentName,
+            evaluator: "llm_judge",
+          });
+        }
+      }
 
       results.push({
         scenarioId: scenario.id,
@@ -194,11 +275,13 @@ export async function runExperiment(
         latency,
         usedAI,
         error,
+        safetyEvaluation,
       });
 
       console.log(`[Opik Experiment] Completed scenario ${scenario.id}: avg score ${evaluation.average.toFixed(1)}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[Opik Experiment] Failed scenario ${scenario.id}:`, err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       results.push({
         scenarioId: scenario.id,
         scenarioName: scenario.name,
@@ -210,11 +293,11 @@ export async function runExperiment(
           financialAlignment: 0,
           safetyFlags: true,
           average: 0,
-          reasoning: `Error: ${err.message || "Unknown error"}`,
+          reasoning: `Error: ${errorMessage}`,
         },
         latency: 0,
         usedAI: false,
-        error: err.message || "Unknown error",
+        error: errorMessage,
       });
     }
   }
@@ -225,6 +308,35 @@ export async function runExperiment(
 
   console.log(`[Opik Experiment] Completed experiment ${experimentId}`);
   console.log(`[Opik Experiment] Summary:`, summary);
+  
+  // Log safety tradeoff metrics to Opik if available
+  if (summary.safetyMetrics) {
+    const safetyTraceId = generateTraceId();
+    await logTrace({
+      traceId: safetyTraceId,
+      experimentName: "safety-tradeoff-metrics",
+      promptVersion,
+      modelVersion,
+      input: {
+        experimentId,
+        experimentName,
+        totalSafetyScenarios: results.filter((r) => r.safetyEvaluation !== undefined).length,
+      },
+      output: {
+        safetyMetrics: summary.safetyMetrics,
+      },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        precision: summary.safetyMetrics.precision,
+        recall: summary.safetyMetrics.recall,
+        f1Score: summary.safetyMetrics.f1Score,
+        truePositives: summary.safetyMetrics.truePositives,
+        falsePositives: summary.safetyMetrics.falsePositives,
+        falseNegatives: summary.safetyMetrics.falseNegatives,
+        trueNegatives: summary.safetyMetrics.trueNegatives,
+      },
+    });
+  }
 
   return {
     experimentId,
@@ -262,6 +374,31 @@ function calculateExperimentSummary(results: ExperimentResult[]): ExperimentSumm
 
   const totalLatency = completed.reduce((sum, r) => sum + r.latency, 0);
 
+  // Calculate safety tradeoff metrics
+  const safetyResults = completed.filter((r) => r.safetyEvaluation !== undefined);
+  let safetyMetrics: ExperimentSummary["safetyMetrics"] | undefined;
+  
+  if (safetyResults.length > 0) {
+    const tp = safetyResults.filter((r) => r.safetyEvaluation?.isTruePositive).length;
+    const fp = safetyResults.filter((r) => r.safetyEvaluation?.isFalsePositive).length;
+    const fn = safetyResults.filter((r) => r.safetyEvaluation?.isFalseNegative).length;
+    const tn = safetyResults.filter((r) => r.safetyEvaluation?.isTrueNegative).length;
+
+    const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+    const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+    const f1Score = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+
+    safetyMetrics = {
+      truePositives: tp,
+      falsePositives: fp,
+      falseNegatives: fn,
+      trueNegatives: tn,
+      precision: Math.round(precision * 100) / 100,
+      recall: Math.round(recall * 100) / 100,
+      f1Score: Math.round(f1Score * 100) / 100,
+    };
+  }
+
   return {
     totalScenarios: results.length,
     completedScenarios: completed.length,
@@ -276,6 +413,7 @@ function calculateExperimentSummary(results: ExperimentResult[]): ExperimentSumm
     safetyFlagsCount: results.filter((r) => r.evaluation.safetyFlags).length,
     averageLatency: totalLatency / count,
     aiUsageRate: (withAI.length / results.length) * 100,
+    safetyMetrics,
   };
 }
 

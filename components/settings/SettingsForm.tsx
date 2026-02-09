@@ -11,8 +11,9 @@ import {
   currencies,
   financialConcerns,
   financialGoals,
-  incomeRanges,
+  getIncomeRanges,
 } from "@/lib/data/profileOptions";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { getUserProfile, saveUserProfile } from "@/lib/supabase/user";
 import { showError, showSuccess } from "@/lib/utils";
 import type { UserProfile } from "@/types";
@@ -41,11 +42,21 @@ export function SettingsForm() {
   const [selectedGoals, setSelectedGoals] = React.useState<string[]>([]);
   const [selectedConcerns, setSelectedConcerns] = React.useState<string[]>([]);
 
+  const incomeOptions = React.useMemo(() => getIncomeRanges(currency), [currency]);
+
   React.useEffect(() => {
     async function loadProfile() {
       try {
+        // Check authentication first (matches dashboard pattern)
+        const user = await getCurrentUser();
+        if (!user) {
+          router.push("/signin?redirect=/settings");
+          return;
+        }
+
+        // Then check profile/onboarding
         const profile = await getUserProfile();
-        if (!profile) {
+        if (!profile || !profile.onboardingComplete) {
           router.push("/onboarding");
           return;
         }
@@ -54,8 +65,9 @@ export function SettingsForm() {
         setCurrency(profile.currency || "USD");
         setSelectedGoals(profile.goals || []);
         setSelectedConcerns(profile.concerns || []);
-      } catch (error) {
-        console.error("Failed to load profile:", error);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Failed to load profile";
+        console.error("Failed to load profile:", errorMessage);
         showError(error, "general");
       } finally {
         setLoading(false);
@@ -79,7 +91,7 @@ export function SettingsForm() {
     );
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!incomeRange) {
@@ -94,23 +106,24 @@ export function SettingsForm() {
 
     setSaving(true);
 
-    const userProfile: UserProfile = {
-      incomeRange,
-      currency: currency || "USD",
-      goals: selectedGoals,
-      concerns: selectedConcerns,
-      onboardingComplete: true,
-    };
+    try {
+      const userProfile: UserProfile = {
+        incomeRange,
+        currency: currency || "USD",
+        goals: selectedGoals,
+        concerns: selectedConcerns,
+        onboardingComplete: true,
+      };
 
-    saveUserProfile(userProfile)
-      .then(() => {
-        showSuccess("Your preferences have been updated.");
-      })
-      .catch((error) => {
-        console.error("Failed to update profile:", error);
-        showError(error, "general");
-      })
-      .finally(() => setSaving(false));
+      await saveUserProfile(userProfile);
+      showSuccess("Your preferences have been updated.");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to update profile";
+      console.error("Failed to update profile:", errorMessage);
+      showError(error, "general");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -139,24 +152,6 @@ export function SettingsForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-8">
             <motion.div variants={itemVariants} className="space-y-2">
-              <label
-                htmlFor="incomeRange"
-                className="text-sm font-medium text-foreground"
-              >
-                Annual income range
-              </label>
-              <Select
-                id="incomeRange"
-                name="incomeRange"
-                options={incomeRanges}
-                value={incomeRange}
-                onChange={(value) => setIncomeRange(value)}
-                placeholder="Select an option"
-                required
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants} className="space-y-2">
               <label htmlFor="currency" className="text-sm font-medium text-foreground">
                 Preferred currency
               </label>
@@ -165,8 +160,29 @@ export function SettingsForm() {
                 name="currency"
                 options={currencies}
                 value={currency}
-                onChange={(value) => setCurrency(value)}
+                onChange={(value) => {
+                  setCurrency(value);
+                  setIncomeRange("");
+                }}
                 placeholder="Select your currency"
+                required
+              />
+            </motion.div>
+
+            <motion.div variants={itemVariants} className="space-y-2">
+              <label
+                htmlFor="incomeRange"
+                className="text-sm font-medium text-foreground"
+              >
+                Annual income range ({currency})
+              </label>
+              <Select
+                id="incomeRange"
+                name="incomeRange"
+                options={incomeOptions}
+                value={incomeRange}
+                onChange={(value) => setIncomeRange(value)}
+                placeholder="Select an option"
                 required
               />
             </motion.div>
