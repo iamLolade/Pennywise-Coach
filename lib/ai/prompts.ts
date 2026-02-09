@@ -3,6 +3,9 @@
  * Versioned for experiment tracking in Opik
  */
 
+import { formatMoney } from "@/lib/utils/money";
+import { humanizeProfileForPrompt } from "@/lib/ai/profileHumanizer";
+
 export const PROMPT_VERSIONS = {
   v1: "v1-baseline",
   v2: "v2-improved",
@@ -30,11 +33,6 @@ export function getAnalysisPrompt(
   }>,
   userQuestion?: string
 ): string {
-  // Humanize profile fields so the model sees real labels (not internal IDs)
-  // and format amounts in the user's currency for better grounding.
-  const { humanizeProfileForPrompt } = require("./profileHumanizer") as typeof import("./profileHumanizer");
-  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
-
   const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
     humanizeProfileForPrompt(userProfile);
 
@@ -144,12 +142,10 @@ export function getInsightPrompt(
   }>,
   summary: string
 ): string {
-  const { humanizeProfileForPrompt } = require("./profileHumanizer") as typeof import("./profileHumanizer");
-  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
   const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
     humanizeProfileForPrompt(userProfile);
 
-  const basePrompt = `Generate a short, encouraging ${version === PROMPT_VERSIONS.v2 || version === PROMPT_VERSIONS.v3 ? "" : ""}financial insight for this user.
+  const basePrompt = `Generate a short, encouraging financial insight for this user.
 
 User Profile:
 - Income Range: ${incomeRangeLabel}
@@ -226,8 +222,6 @@ export function getCoachPrompt(
     description: string;
   }>
 ): string {
-  const { humanizeProfileForPrompt } = require("./profileHumanizer") as typeof import("./profileHumanizer");
-  const { formatMoney } = require("../utils/money") as typeof import("../utils/money");
   const { currency, incomeRangeLabel, goalsLabels, concernsLabels } =
     humanizeProfileForPrompt(userProfile);
 
@@ -280,6 +274,7 @@ Guidelines:
 - Be supportive and non-judgmental (never shame or criticize)
 - Reference their goals and concerns when relevant
 - If they ask about spending, reference their recent transactions if provided
+- Never invent user-specific facts (income range, last expense, totals, balances, or transaction history). If the answer isn't explicitly in the provided User Profile / Recent Spending Context / Financial Summary, say you don't have enough data and suggest where to find it (Dashboard/Transactions/Settings).
 - Keep responses conversational, warm, and human
 - Never give specific investment advice or guarantee outcomes
 - Return ONLY valid JSON, no additional text or markdown`
