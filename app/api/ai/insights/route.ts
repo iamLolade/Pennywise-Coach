@@ -14,6 +14,7 @@ import {
   calculateTotalExpenses,
 } from "@/lib/utils/transactions";
 import { formatMoney } from "@/lib/utils/money";
+import { isLikelyJsonFragment, sanitizeModelField, stripMarkdownCodeFences } from "@/lib/utils/text";
 import type { Transaction, UserProfile } from "@/types";
 
 /**
@@ -131,14 +132,36 @@ export async function POST(request: NextRequest) {
       // Handle structured response or plain text
       if (typeof aiResponse === "object" && "title" in aiResponse && "content" in aiResponse) {
         // Structured response
-        insight = aiResponse as InsightResponseData;
+        const structured = aiResponse as InsightResponseData;
+        insight = {
+          title: sanitizeModelField(structured.title) || "Financial insight",
+          content: sanitizeModelField(structured.content) || "Here’s a quick insight based on your recent activity.",
+          suggestedAction:
+            sanitizeModelField(structured.suggestedAction) ||
+            "Keep tracking your spending to build better habits.",
+        };
       } else {
         // Plain text response - parse it
-        const lines = (aiResponse as string).split("\n").filter((line) => line.trim());
+        const cleaned = stripMarkdownCodeFences(String(aiResponse || "")).trim();
+        const lines = cleaned
+          .split("\n")
+          .map((l) => sanitizeModelField(l))
+          .filter((line) => line.trim())
+          .filter((line) => line !== "{" && line !== "}" && line !== "[" && line !== "]")
+          .filter((line) => !isLikelyJsonFragment(line));
+
+        const titleLine = lines.find((l) => l.length >= 4) || "Financial insight";
+        const actionLine =
+          lines.slice().reverse().find((l) => l.length >= 6) ||
+          "Keep tracking your spending to build better habits.";
+        const bodyLines = lines.filter((l) => l !== titleLine && l !== actionLine);
+
         insight = {
-          title: lines[0]?.replace(/^[-*]\s*/, "").trim() || "Financial insight",
-          content: lines.slice(0, 2).join(" ").trim() || (aiResponse as string),
-          suggestedAction: lines[lines.length - 1]?.replace(/^[-*]\s*/, "").trim() || "Keep tracking your spending to build better habits.",
+          title: titleLine,
+          content:
+            bodyLines.slice(0, 2).join(" ").trim() ||
+            "Here’s a quick insight based on your recent activity.",
+          suggestedAction: actionLine,
         };
       }
       

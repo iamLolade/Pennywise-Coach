@@ -120,7 +120,8 @@ IMPORTANT:
 - Be supportive and non-judgmental
 - Keep suggestions realistic and actionable
 - Ensure all arrays have at least 2 items
-- Ground your patterns/suggestions in the Quick Summary and transactions (mention categories/amounts when helpful)`
+- Ground your patterns/suggestions in the Quick Summary and transactions (mention categories/amounts when helpful)
+- Each of "summary", and each item in "patterns"/"anomalies"/"suggestions" MUST be plain text (no JSON fragments, no quotes-as-code, no backticks).`
   );
 }
 
@@ -197,6 +198,7 @@ IMPORTANT:
 - Focus on positive observations and gentle guidance
 - Keep content concise (under 100 words total)
 - Ensure the suggestedAction is specific and achievable
+- Each of "title", "content", and "suggestedAction" MUST be plain text (no JSON fragments, no backticks, no code fences).
 - Never give investment advice or make guarantees`
   );
 }

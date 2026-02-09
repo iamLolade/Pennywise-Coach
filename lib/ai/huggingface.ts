@@ -306,6 +306,38 @@ function parseLLMResponse(
   responseText: string,
   transactions: Transaction[]
 ): SpendingAnalysis {
+  const cleanText = (value: unknown): string => {
+    if (typeof value !== "string") return "";
+    let text = value.trim();
+    // Remove markdown fences if the model stuffed them into fields
+    text = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+    // Remove a leading "json:" or similar label
+    text = text.replace(/^json\s*[:\-]?\s*/i, "").trim();
+    return text;
+  };
+
+  const looksLikeJsonBlob = (text: string): boolean => {
+    const t = text.trim();
+    return (
+      (t.startsWith("{") && t.includes("}")) ||
+      (t.startsWith("[") && t.includes("]")) ||
+      t.includes(`"summary"`) ||
+      t.includes(`"patterns"`) ||
+      t.includes(`"suggestions"`)
+    );
+  };
+
+  const toCleanStringArray = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((v) => typeof v === "string")
+      .map((v) => cleanText(v))
+      .filter((v) => v.length > 0)
+      // Avoid showing raw JSON-looking strings in the UI
+      .filter((v) => !looksLikeJsonBlob(v))
+      .slice(0, 8);
+  };
+
   // Clean the response text - remove markdown code blocks if present
   let cleanedText = responseText.trim();
 
@@ -357,16 +389,33 @@ function parseLLMResponse(
   try {
     const parsed = JSON.parse(jsonMatch[0]);
 
+    // Some models occasionally embed the whole JSON response inside a string field.
+    // If that happens, try to recover the actual fields.
+    let recovered: any = parsed;
+    if (typeof parsed?.summary === "string" && looksLikeJsonBlob(parsed.summary)) {
+      try {
+        const maybe = JSON.parse(cleanText(parsed.summary));
+        if (maybe && typeof maybe === "object") {
+          recovered = maybe;
+        }
+      } catch {
+        // ignore recovery
+      }
+    }
+
     // Validate and construct SpendingAnalysis
     // Note: totalSpent, totalIncome, and byCategory will be enriched by the API route
     const analysis: SpendingAnalysis = {
       totalSpent: 0, // Will be calculated and set by API route
       totalIncome: 0, // Will be calculated and set by API route
       byCategory: {}, // Will be calculated and set by API route
-      patterns: Array.isArray(parsed.patterns) ? parsed.patterns : [],
-      anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-      summary: parsed.summary || "Analysis generated successfully.",
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      patterns: toCleanStringArray(recovered?.patterns),
+      anomalies: toCleanStringArray(recovered?.anomalies),
+      summary:
+        typeof recovered?.summary === "string" && cleanText(recovered.summary).length > 0
+          ? cleanText(recovered.summary)
+          : "Here’s a summary of your spending patterns.",
+      suggestions: toCleanStringArray(recovered?.suggestions),
     };
 
     return analysis;
@@ -495,28 +544,33 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
 
     // Try to parse as JSON (for structured responses)
     try {
-      // Remove markdown code blocks if present
-      let cleanedText = generatedText.trim();
-      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-      cleanedText = cleanedText.trim();
+      const { sanitizeModelField, stripMarkdownCodeFences } = require("../utils/text") as typeof import("../utils/text");
+
+      // Remove markdown code blocks if present (robust)
+      let cleanedText = stripMarkdownCodeFences(generatedText.trim());
 
       // Try to extract JSON object
       const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        const maybe = (parsed && typeof parsed === "object" ? parsed : null) as any;
+        const root = maybe?.financial_insight && typeof maybe.financial_insight === "object"
+          ? maybe.financial_insight
+          : maybe;
+
         // Validate structure
         if (
-          parsed.title &&
-          parsed.content &&
-          parsed.suggestedAction &&
-          typeof parsed.title === "string" &&
-          typeof parsed.content === "string" &&
-          typeof parsed.suggestedAction === "string"
+          root?.title &&
+          root?.content &&
+          root?.suggestedAction &&
+          typeof root.title === "string" &&
+          typeof root.content === "string" &&
+          typeof root.suggestedAction === "string"
         ) {
           return {
-            title: parsed.title,
-            content: parsed.content,
-            suggestedAction: parsed.suggestedAction,
+            title: sanitizeModelField(root.title) || "Financial insight",
+            content: sanitizeModelField(root.content) || "Here’s a quick insight based on your recent activity.",
+            suggestedAction: sanitizeModelField(root.suggestedAction) || "Keep tracking your spending to build better habits.",
           } as InsightResponseData;
         }
       }
@@ -526,7 +580,8 @@ export async function generateInsight(prompt: string): Promise<InsightResponseDa
     }
 
     // Fallback to plain text
-    return generatedText.trim();
+    const { stripMarkdownCodeFences } = require("../utils/text") as typeof import("../utils/text");
+    return stripMarkdownCodeFences(generatedText.trim());
   } catch (error: unknown) {
     // Error already logged in runChatCompletion
     throw error;
